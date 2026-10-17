@@ -1,96 +1,89 @@
-# Put Recovery Engine v2 into your "IRD V0.6" sheet: step by step
+# Recovery Engine: setup from zero (no coding needed)
 
-Time: about 20 minutes. You only copy and paste. Nothing in C (the Recovery App sheet) or in Parth's V2 sheet is changed.
+You need **4 files**, sent to you with this guide:
 
-You need the 4 files from the `recovery-engine` folder:
-
-| File in this folder | Goes into the editor file called |
+| File | What it is |
 |---|---|
-| `Code.gs` | **Code.gs** (already exists) |
-| `IRD_Core.gs` | **IRD_Core.gs** (already exists) |
-| `IRD_App.html` | **IRD_App.html** (already exists) |
-| `IRD_Service.gs` | **IRD_Service.gs** (new; you add it in step 6) |
+| `Code.gs` | All the backend. You paste it into Apps Script once. |
+| `App.html` | The app screen. You paste it into Apps Script once. |
+| `RAWItemlevel_basic.sql` | Query 2. Its result goes into the **RAWItemlevel** tab. |
+| `STORE_VARIANCE_DAILY.sql` | Query 1. Its result goes into the **STORE_VARIANCE_DAILY** tab. |
 
-To copy a file from GitHub: open the file → click the **Copy raw file** icon (two overlapping squares, top-right of the code) → it is now on your clipboard.
+Total time: about 25 minutes the first time.
 
 ---
 
-## Part A: Back up (1 min)
-1. Open the **IRD V0.6** Google Sheet.
-2. **File → Make a copy** and name it `IRD V0.6 BACKUP`. If anything goes wrong, the old version is still there.
+## Part 1: Make the sheet (2 min)
+1. Open **https://docs.google.com/spreadsheets/u/0/create** using your work account.
+2. Click "Untitled spreadsheet" (top left) and name it **Recovery Engine**.
 
-## Part B: Replace the code (5 min)
-3. In the IRD V0.6 sheet: **Extensions → Apps Script**. You see the editor with Code.gs, IRD_Core.gs and IRD_App.html on the left.
-4. Click **Code.gs** on the left. Click anywhere inside the code. Press **Ctrl+A** (Mac: Cmd+A), then **Delete**. Paste the new `Code.gs` (**Ctrl+V**). Press **Ctrl+S** to save.
-5. Do exactly the same for **IRD_Core.gs** (paste the new `IRD_Core.gs`) and **IRD_App.html** (paste the new `IRD_App.html`). Save each one.
-6. Add the new file: click the **+** next to "Files" → **Script** → type `IRD_Service` (no ".gs", the editor adds it) → press Enter. Delete the few lines it starts with, paste `IRD_Service.gs`, and save.
-7. Check: the left side now shows 4 files: Code.gs, IRD_Core.gs, IRD_App.html, IRD_Service.gs.
+## Part 2: Paste the code (5 min)
+3. In that sheet: **Extensions → Apps Script**. A new tab opens with a file called **Code.gs** that contains `function myFunction() { }`.
+4. Click "Untitled project" (top left) and rename it **Recovery Engine**.
+5. Click inside the code area. Press **Ctrl+A** (Mac: Cmd+A), then **Delete**. The area is now empty.
+6. Open the `Code.gs` file I sent. Press **Ctrl+A**, **Ctrl+C**, go back to Apps Script, and press **Ctrl+V**. Then **Ctrl+S** to save.
+7. On the left, next to "Files", click **+** → **HTML**. Type **App** (capital A, nothing else) and press Enter.
+8. In the new App.html, press **Ctrl+A** → **Delete**. Paste the whole `App.html` file I sent. Press **Ctrl+S**.
+   You should now see two files on the left: **Code.gs** and **App.html**.
 
-## Part C: Run setup once (3 min)
-8. At the top, next to **Run** and **Debug**, there is a dropdown that currently says `IRD_SETUP`. Click it and choose **RE_SETUP**.
-9. Click **Run**. A box asks for permission: **Review permissions** → pick your grofers account → **Allow**.
-   It asks for Drive access because the app now creates the printable captain sheets. That is expected.
-10. Wait for "Execution completed" at the bottom. Go back to the sheet tab in your browser and **reload the page**.
-11. A new menu appears at the top of the sheet: **Recovery Engine**. Setup has created these tabs:
-    `CFG, USERS, SOP, HEALTH, PLANS, PLAN_TASKS, PLAN_ITEMS, ACTUALS, CM_REVIEWS, ACTION_LOG, DAILY`.
-    The old V0.6 tabs (IRD_SETTINGS, IRD_PLANS …) are no longer used. Right-click each one → **Hide sheet**.
+## Part 3: Let the script build the backend (2 min)
+9. Go back to the **sheet** tab and **reload the page** (F5). Wait about 10 seconds. A new menu, **Recovery Engine**, appears at the top, after "Help".
+10. Click **Recovery Engine → 1. Set up / repair tabs**.
+    - The first time, Google asks for permission: **Continue** → choose your work account → **Allow**.
+      If you see "Google hasn't verified this app": click **Advanced** → **Go to Recovery Engine**. It is your own script.
+    - After allowing, **click the menu item once more**. The first click only grants permission.
+11. A message says it is set up, and the **START_HERE** tab opens. Setup has created:
+    - **Blue tabs** (inputs you fill): RAWItemlevel, STORE_VARIANCE_DAILY, STORE_MASTER, PILOT_COHORT, STORE_HEALTH_RAW, EMPLOYEE_CAPACITY_SYNC_RAW, LOCATION_RECOVERY_RAW, AUDIT_EXECUTION_RAW
+    - **Green tabs** (the app's backend): CFG, USERS, SOP, HEALTH, PLANS, PLAN_TASKS, PLAN_ITEMS, ACTUALS, CM_REVIEWS, ACTION_LOG, DAILY
 
-## Part D: Fill in the settings (5 min)
-Open the **CFG** tab. Column A is the setting, column B is **your value** (blank = use the default in column C), and column D explains it.
+## Part 4: Put the data in (10 min the first time)
+12. Run **`RAWItemlevel_basic.sql`** in your query tool. Get the result into the **RAWItemlevel** tab in either of two ways:
+    - **Sync (best):** point your query tool's Google Sheets sync at this sheet, tab **RAWItemlevel**, mode "replace". Then it refreshes by itself.
+    - **By hand:** download the result as CSV. In the sheet, click the **RAWItemlevel** tab → **File → Import → Upload** → pick the CSV → Import location **"Replace current sheet"** → **Import data**.
+13. Do the same with **`STORE_VARIANCE_DAILY.sql`** → tab **STORE_VARIANCE_DAILY**.
+14. *(Optional, unlocks more features: see START_HERE for which feature each tab unlocks.)* Paste the exports you already have into the other blue tabs with the same names, e.g. EMPLOYEE_CAPACITY_SYNC_RAW, AUDIT_EXECUTION_RAW. Column order does not matter.
+15. Click **Recovery Engine → 2. Check data health**. The HEALTH tab opens. Both **required** rows must say **OK**.
 
-| Setting (column A) | What to put in column B |
+## Part 5: People and settings (3 min)
+16. **USERS** tab: your email is already there as PM. Add one row per person: `email`, `role` (SM, CM or PM), and for SMs `outlet_ids` (e.g. `7076`).
+17. **CFG** tab: column B is your value; leave it blank to use the default in column C. Set at least:
+    - `pilot_outlets` → the store IDs to show, e.g. `7076,7978,6826`. Blank = every store in RAWItemlevel.
+    - Every threshold (severity, broken rack and aisle, hours) already has Parth's numbers. You can change them here or in the app's Settings screen, and each change is logged.
+
+## Part 6: Publish the app (3 min)
+18. In the **Apps Script** tab: blue **Deploy** button (top right) → **New deployment** → click the gear next to "Select type" → **Web app**.
+    - Description: `v1`
+    - Execute as: **Me**
+    - Who has access: **Anyone within [your organisation]**
+    - Click **Deploy** (allow access again if asked) and **copy the Web app URL**. That link is the app.
+19. Open the link. To open one store directly, add `?store=7076` to the end.
+20. Back in the sheet: **Recovery Engine → 3. Turn on daily 10:00 job**. This keeps the before/after numbers the results screens use.
+
+---
+
+## When I send you an updated Code.gs or App.html
+1. Apps Script → click the file → **Ctrl+A** → **Delete** → paste the new one → **Ctrl+S**.
+2. **Deploy → Manage deployments** → pencil icon → Version: **New version** → **Deploy**. The link stays the same.
+3. In the sheet: **Recovery Engine → 1. Set up / repair tabs** (safe to run any time; it never deletes data).
+
+## Where everything shows up
+| You want | Look at |
 |---|---|
-| `pilot_outlets` | `7184,6406,7877,6826,3432,7204,8468,8211,4823,7476` |
-| `inputs_sheet_id` | The ID of Parth's **Instore Recovery Engine V2** sheet: the long code in its URL between `/d/` and `/edit`. The app then reads EMPLOYEE_CAPACITY_SYNC_RAW, LOCATION_RECOVERY_RAW, AUDIT_EXECUTION_RAW, STORE_HEALTH_RAW and PILOT_COHORT directly from there, always fresh, with no pasting. |
-| `cm_emails` | CM emails, separated by commas |
-| `recovery_app_url` | The Recovery App (C) web link |
-| `export_folder_id` | Optional: the ID of a Drive folder for the print sheets |
-
-**Variance feed (RAWItemlevel in C):** the lean monthly export works as-is (`month_start_date, outlet_id, item_id, item_name, variance, variance_qty, rnk, neg_loc_array, probable_locations, raw_synced_at`). If the audit columns (`audit_decrement_dates`, `audit_increment_qty` …) are ever added back, the app picks them up automatically and switches to T-1/T-3 negative priority and "found after plan" proof. `INTERIM_LOCATION` is never sent to a captain, and items under `min_item_variance` (₹20) are ignored.
-
-Everything else already has Parth's numbers (PPI 18 s, TFR 99.5%, R2A 30 s, surge 2%, the full-rack 25% / 50% rules, 4.7 min per location, 0.4 conversion). Change them here or in the app's **Settings & log** screen at any time.
-
-**USERS tab** (who can do what). One row per person:
-
-| email | role | outlet_ids |
-|---|---|---|
-| you@grofers.com | PM | *(blank = all)* |
-| cm.name@grofers.com | CM | *(blank = all)* |
-| sm.name@grofers.com | SM | 3432 |
-
-Setup adds you as PM. While `restrict_sm_to_users` is FALSE, anyone in the company who is not listed is treated as an SM and can open any pilot store. Set it to TRUE once USERS is complete.
-
-## Part E: Check the data (2 min)
-12. Sheet menu: **Recovery Engine → Check data health**. The **HEALTH** tab opens with one row per input.
-    Every row should say **OK**. EMPTY means a tab name is wrong (fix the `tab_…` setting in CFG). ERROR shows the reason in the "note" column.
-13. **Recovery Engine → Turn on daily 10:00 job.** This takes the daily snapshots used for the T+3/T+7 results and the region ₹/hour benchmarks.
-
-## Part F: Publish (2 min)
-14. In the Apps Script editor: **Deploy → Manage deployments**.
-15. Select your existing deployment, click the **pencil (edit)** icon → **Version: New version** → **Deploy**. The link stays the same, so SMs need nothing new.
-    *No deployment yet?* **Deploy → New deployment** → gear icon → **Web app** → Execute as: **Me** → Who has access: **Anyone within Zomato** → **Deploy** → copy the link.
-16. Open the link. Add `?store=3432` to the end to open a specific store.
-
-## Where to see everything (your backend)
-| You want to see | Look at |
-|---|---|
-| Who did what, when (plans, replans, actuals, CM decisions, settings changes, print sheets, daily job) | **ACTION_LOG** tab, or the app's **Settings & log** screen |
-| Every plan | **PLANS** (one row per plan; `changes_vs_suggested` records what the SM changed, automatically) |
-| Suggested vs planned per task and captain | **PLAN_TASKS** (`kind` S = suggested, P = planned) |
-| Items being recovered, with their starting variance | **PLAN_ITEMS** |
-| Actual hours and task status from the SM | **ACTUALS** |
+| Who did what, when | **ACTION_LOG** tab, or the app's Settings & log screen |
+| Every plan, and what the SM changed vs the suggestion | **PLANS** (`changes_vs_suggested`) |
+| Suggested vs planned, per task and captain | **PLAN_TASKS** (`kind` S = suggested, P = planned) |
+| Actual hours logged by SMs | **ACTUALS** |
 | CM decisions | **CM_REVIEWS** |
-| Daily store snapshots (pending ₹, severity, recovery mode) | **DAILY** |
-| Whether the data feeding the app is complete and fresh | **HEALTH** (menu → Check data health) |
-| Handheld steps printed for captains | **SOP**: edit the text, and the next print uses it |
-| Every setting | **CFG**, or the app's Settings screen (PM only) |
+| Is my data complete and fresh? | **HEALTH** (menu → Check data health) |
+| Printed captain steps | **SOP**: edit the text, and the next print uses it |
+| Settings | **CFG** |
 
 ## If something goes wrong
 | You see | Do this |
 |---|---|
-| "run RE_SETUP once from the editor first" | Part C, step 8 |
-| "cannot open the variance source sheet (C)" | You (the owner) need view access to C. `source_sheet_id` must be C's ID. |
-| "tab "…" not found in the inputs sheet" | The tab name in Parth's sheet is different. Fix the matching `tab_…` setting in CFG. |
-| "header row of PLANS was changed" | Someone edited row 1 of that tab. Put the header back (copy it from this guide's backup or run RE_SETUP on a copy). |
-| The app shows old data after Parth's sheet refreshed | Menu → **Clear cached inputs** |
-| A new version broke something | **Deploy → Manage deployments → pencil → Version:** pick the previous number → **Deploy**. This takes under a minute. |
+| No "Recovery Engine" menu | Reload the sheet and wait 10 seconds. Check that Code.gs was saved (no orange dot on the file name). |
+| "tab RAWItemlevel is missing" | Menu → 1. Set up / repair tabs |
+| HEALTH says EMPTY for a required tab | The query result was not pasted into that tab, or it went into a tab with a different name |
+| "is missing column(s): …" | Your query output is missing that column. Check the header row of the tab. |
+| The app shows old numbers after a refresh | Menu → Clear cached inputs |
+| A new version broke something | Deploy → Manage deployments → pencil → pick the previous version → Deploy (under a minute) |

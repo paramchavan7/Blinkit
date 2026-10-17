@@ -61,7 +61,7 @@ function RE_SERVICE_FACTORY(REC) {
   }
   function regionOf(repo, id, master) {
     const h = healthOf(repo, id), m = master[text(id)] || {};
-    return text(h.region) || m.cluster || m.city || 'Unassigned';
+    return text(h.region) || m.region || m.cluster || m.city || 'Unassigned';
   }
 
   /** Current plan per outlet: latest confirmed version that nothing supersedes. */
@@ -133,7 +133,7 @@ function RE_SERVICE_FACTORY(REC) {
     try { regional = JSON.parse(repo.getProp('REGION_RPH') || '{}'); } catch (e) { regional = {}; }
     const region = regionOf(repo, outletId, master), last = history.find(x => x.actual.logged);
     return {
-      store: {outlet_id: text(outletId), outlet_name: m.outlet_name || text(outletId), city: m.city || '', region, cm_sm: m.cm_sm || '', cohort: text(h.cohort), low_order_window: text(h.low_order_window)},
+      store: {outlet_id: text(outletId), outlet_name: m.outlet_name || text(outletId), city: m.city || '', region, cm_sm: m.cm_sm || '', cohort: text(h.cohort), low_order_window: text(h.low_order_window) || text(m.low_order_window)},
       freshness: REC.freshness(a.wl.summary.feed_date, c.today, c.st), summary: a.wl.summary, severity: a.sev, diagnosis: a.diag,
       roster: a.roster, suggestion: {budget_hours: a.suggestion.budget_hours, crew: a.suggestion.crew}, sops: sopMap(repo),
       settings: c.st, today_plan: todayPlan, history,

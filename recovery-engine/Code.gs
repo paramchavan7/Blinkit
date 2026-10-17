@@ -1,41 +1,56 @@
 /**
- * IRD v2 | Recovery Engine | Code.gs (Google Sheets backend + web app entry points)
+ * Recovery Engine | backend (runs inside Google Apps Script, bound to its own Google Sheet)
  *
- * Lives in the "IRD V0.6" sheet's Apps Script project, next to IRD_Core.gs, IRD_Service.gs and IRD_App.html.
- * Everything the app does is visible in this sheet:
+ * Fully independent: it only reads and writes tabs in its own sheet.
+ *   START_HERE  what to paste where (written by setup)
+ *   INPUT tabs  RAWItemlevel, STORE_VARIANCE_DAILY (required) + STORE_MASTER, PILOT_COHORT, STORE_HEALTH_RAW,
+ *               EMPLOYEE_CAPACITY_SYNC_RAW, LOCATION_RECOVERY_RAW, AUDIT_EXECUTION_RAW (optional, unlock more features)
  *   CFG         settings (edit here or in the app's Settings tab; every change is logged)
  *   USERS       who can do what (email, role SM/CM/PM, outlet_ids)
- *   ACTION_LOG  every confirm / replace / actuals / CM decision / settings change / daily job
- *   PLANS, PLAN_TASKS (S = suggested, P = planned), PLAN_ITEMS, ACTUALS, CM_REVIEWS, DAILY   append-only data
- *   HEALTH      data check written by the menu "Check data health"
- *   SOP         the handheld steps shown to captains
- *   IN_*        inputs, used only when inputs_sheet_id in CFG is blank
+ *   ACTION_LOG  every confirm / replace / actuals / CM decision / settings change / print / daily job
+ *   PLANS, PLAN_TASKS (S = suggested, P = planned), PLAN_ITEMS, ACTUALS, CM_REVIEWS, DAILY   append-only app data
+ *   HEALTH      data check (menu > Check data health)
+ *   SOP         the handheld steps printed for captains
  * Printable captain sheets are separate Google Sheets in Drive (one tab per captain), linked from the app and ACTION_LOG.
- * Reads C (UPW&UK Inventory Recovery App) READ-ONLY for RAWItemlevel + Store_Master. Never writes to C or to the inputs sheet.
  */
 var RE_TZ = 'Asia/Kolkata';
 var RE_SVC_ = null;
 /** Lazy: Apps Script loads files top to bottom, so REC (IRD_Core.gs) does not exist yet when this line of Code.gs runs. */
 function re_svc() { return RE_SVC_ || (RE_SVC_ = RE_SERVICE_FACTORY(REC)); }
-var RE_HTML_FILE = 'IRD_App';
+var RE_HTML_FILE = 'App';
 var RE_CACHE_SEC = 6 * 3600;
 
-// Input tabs. Columns are read by name (any order, extra columns ignored). `need` must exist; `cols` are read when present.
+// Input tabs you fill (paste or sync a query result into them). Columns are read by name: any order, extra columns ignored.
+// `need` must exist; `cols` are read when present and are the header row setup writes.
+var RE_RAW_NEEDED = ['outlet_id', 'item_id', 'item_name', 'variance', 'variance_qty', 'rnk', 'neg_loc_array', 'probable_locations'];
+var RE_RAW_OPTIONAL = ['month_start_date', 'outlet_name', 'city', 'raw_synced_at', 'update_date', 'audit_decrement_qty', 'audit_increment_qty',
+  'audit_decrement_dates', 'audit_increment_dates', 'l0', 'upc', 'mrp', 'store_total_absolute_variance'];
 var RE_INPUTS = {
-  IN_STORE_HEALTH: {cfgTab: 'tab_health', need: ['outlet_id'],
-    cols: ['outlet_id', 'region', 'cohort', 'cohort_role', 'comparison_outlet_id', 'open_variance_3m', 'net_variance_2m', 'low_order_window']},
-  IN_STORE_METRICS: {cfgTab: 'tab_store_metrics', need: ['outlet_id'],
-    cols: ['outlet_id', 'metric_date', 'data_period_status', 'ppi', 'tfr_pct', 'r2a_sec', 'surge_pct']},
-  IN_STORE_VARIANCE: {cfgTab: 'tab_store_variance', need: ['outlet_id'],
-    cols: ['date', 'date_', 'outlet_id', 'negative_amount', 'positive_amount', 'net_var']},
-  IN_CAPTAINS: {cfgTab: 'tab_captains', need: ['outlet_id'],
-    cols: ['snapshot_date', 'outlet_id', 'employee_id', 'employee_name', 'captain_id', 'captain_name', 'designation', 'active', 'auditor_active_hours_l7',
-      'missing_complaint_pct_l7', 'wrong_item_complaint_pct_l7', 'recent_presence_status', 'complex_approved', 'iaph', 'qaph', 'bad_audit_pct', 'audits_30d']},
-  IN_LOCATIONS: {cfgTab: 'tab_locations', need: ['outlet_id', 'location_id'],
-    cols: ['outlet_id', 'location_id', 'aisle_id', 'rack_id', 'correction_days_7d', 'current_ppi', 'current_ideal_ppi', 'current_ppi_signal_status']},
-  IN_AUDITS: {cfgTab: 'tab_audits', need: ['audit_date_ist', 'outlet_id', 'auditor_id', 'session_elapsed_seconds'],
-    cols: ['audit_date_ist', 'outlet_id', 'location_id', 'rack_id', 'session_status', 'auditor_id', 'distinct_skus', 'found_qty', 'quality_status',
-      'session_elapsed_seconds', 'end_time', 'expected_sku_coverage_pct']}
+  RAW: {tab: 'RAWItemlevel', cfgTab: 'tab_raw', need: RE_RAW_NEEDED, cols: RE_RAW_NEEDED.concat(RE_RAW_OPTIONAL), required: true, date: 'raw_synced_at',
+    fill: 'Query 2: item-level variance (sql/RAWItemlevel.sql). Refresh daily.', unlocks: 'Everything. The app cannot plan without it.'},
+  STORE_VARIANCE: {tab: 'STORE_VARIANCE_DAILY', cfgTab: 'tab_store_variance', need: ['outlet_id'], required: true, date: 'date_',
+    cols: ['date_', 'outlet_id', 'outlet_name', 'negative_amount', 'positive_amount', 'net_var', 'raw_synced_at'],
+    fill: 'Query 1: daily store variance, last 3 months (sql/STORE_VARIANCE_DAILY.sql). Refresh daily.', unlocks: 'Store severity (open / net variance).'},
+  MASTER: {tab: 'STORE_MASTER', cfgTab: 'tab_store_master', need: ['outlet_id'], date: '',
+    cols: ['outlet_id', 'outlet_name', 'city', 'region', 'cluster', 'cm_sm', 'low_order_window'],
+    fill: 'Type it once: one row per store. low_order_window like 14:00-17:00.', unlocks: 'Region / CM names in the views, best recovery window. Without it, names come from RAWItemlevel.'},
+  COHORT: {tab: 'PILOT_COHORT', cfgTab: 'tab_health', need: ['outlet_id'], date: '',
+    cols: ['pair_id', 'region', 'outlet_id', 'outlet_name', 'cohort_role', 'comparison_outlet_id'],
+    fill: 'Pilot list: BROKEN / CONTROL pairs (the PILOT_COHORT export you already have).', unlocks: 'Broken vs control comparison in the control tower.'},
+  METRICS: {tab: 'STORE_HEALTH_RAW', cfgTab: 'tab_store_metrics', need: ['outlet_id'], date: 'metric_date',
+    cols: ['metric_date', 'data_period_status', 'region', 'outlet_id', 'outlet_name', 'ppi', 'tfr_pct', 'r2a_sec', 'surge_pct'],
+    fill: 'Daily store health (Parth\'s STORE_HEALTH_RAW query).', unlocks: 'PPI / TFR severity and capacity state.'},
+  CAPTAINS: {tab: 'EMPLOYEE_CAPACITY_SYNC_RAW', cfgTab: 'tab_captains', need: ['outlet_id'], date: 'snapshot_date',
+    cols: ['snapshot_date', 'outlet_id', 'employee_id', 'employee_name', 'designation', 'auditor_active_hours_l7', 'missing_complaint_pct_l7',
+      'wrong_item_complaint_pct_l7', 'recent_presence_status', 'complex_approved', 'captain_id', 'captain_name', 'active', 'iaph', 'qaph', 'bad_audit_pct', 'audits_30d'],
+    fill: 'Captain roster (Parth\'s EMPLOYEE_CAPACITY_SYNC_RAW query). Optional column complex_approved = Y/N.', unlocks: 'Suggested crew (pre-ticked best captains).'},
+  LOCATIONS: {tab: 'LOCATION_RECOVERY_RAW', cfgTab: 'tab_locations', need: ['outlet_id', 'location_id'], date: '',
+    cols: ['outlet_id', 'location_id', 'aisle_id', 'rack_id', 'correction_days_7d', 'current_ppi', 'current_ideal_ppi', 'current_ppi_signal_status'],
+    fill: 'Location master + correction / PPI evidence (Parth\'s LOCATION_RECOVERY_RAW query).', unlocks: 'Real rack sizes and Parth\'s full-rack rule.'},
+  AUDITS: {tab: 'AUDIT_EXECUTION_RAW', cfgTab: 'tab_audits', need: ['audit_date_ist', 'outlet_id', 'auditor_id', 'session_elapsed_seconds'], date: 'audit_date_ist',
+    cols: ['audit_date_ist', 'outlet_id', 'location_id', 'rack_id', 'session_status', 'end_time', 'auditor_id', 'distinct_skus', 'found_qty',
+      'quality_status', 'session_elapsed_seconds', 'expected_sku_coverage_pct'],
+    fill: 'Audit sessions, last 30 days (Parth\'s AUDIT_EXECUTION_RAW query).', unlocks: 'Captain IAPH / bad-audit %, and audit evidence (matched / quality gap / off-plan).'}
 };
 var RE_OWN_H = {
   CFG: ['key', 'value', 'default', 'what_it_does'],
@@ -43,11 +58,6 @@ var RE_OWN_H = {
   SOP: ['level', 'step_no', 'step'],
   HEALTH: ['checked_at', 'input', 'source', 'rows', 'outlets', 'latest_date', 'status', 'note']
 };
-// Minimum RAWItemlevel columns. Works with the lean monthly export (month_start_date, raw_synced_at) and the full C schema.
-var RE_RAW_NEEDED = ['outlet_id', 'item_id', 'item_name', 'variance', 'variance_qty', 'rnk', 'neg_loc_array', 'probable_locations'];
-var RE_RAW_OPTIONAL = ['month_start_date', 'raw_synced_at', 'update_date', 'audit_decrement_qty', 'audit_increment_qty', 'audit_decrement_dates', 'audit_increment_dates',
-  'l0', 'upc', 'mrp', 'store_total_absolute_variance'];
-
 // DRAFT handheld SOP. Rahul's ground documentation replaces these rows in the SOP tab; the app reads the tab, not this list.
 var RE_DEFAULT_SOP = [
   ['LOCATION', 1, 'SM: on HHD create a Location Audit for each listed location and assign it to the captain.'],
@@ -139,28 +149,23 @@ function re_ownTab(ss, name, headers) {
 
 // ------------------------------------------------------------------ repo (one per request; reads memoised per request)
 function re_repo() {
-  var ss = re_ss(), memo = {}, st = null, srcSS = null, inSS;
+  var ss = re_ss(), memo = {}, st = null, inSS;
   function settingsRows() { if (!memo.cfg) memo.cfg = re_rowsOf(re_ownTab(ss, 'CFG', RE_OWN_H.CFG)); return memo.cfg; }
   function settings() { if (!st) st = REC.resolveSettings(settingsRows()).settings; return st; }
-  function src() {
-    if (srcSS) return srcSS;
-    try { srcSS = SpreadsheetApp.openById(settings().source_sheet_id); } catch (e) { throw new Error('RE: cannot open the variance source sheet (C). ' + e.message); }
-    return srcSS;
-  }
   function inputsSS() {
     if (inSS !== undefined) return inSS;
     var id = re_text(settings().inputs_sheet_id);
     try { inSS = id ? SpreadsheetApp.openById(id) : null; } catch (e) { throw new Error('RE: cannot open inputs_sheet_id. ' + e.message); }
     return inSS;
   }
-  /** Input tab from the inputs sheet (if set) or the local IN_ tab. Cached for 6 h, keyed on the tab's size so new data busts it. */
+  /** Input tab from this sheet (or inputs_sheet_id if set). Cached for 6 h, keyed on the tab's size so a refresh busts it. */
   function input(name) {
     if (memo[name]) return memo[name];
-    var spec = RE_INPUTS[name], ext = inputsSS(), book = ext || ss, tab = ext ? settings()[spec.cfgTab] : name, sh = book.getSheetByName(tab);
-    if (!sh) { if (ext) throw new Error('RE: tab "' + tab + '" not found in the inputs sheet.'); return (memo[name] = []); }
+    var spec = RE_INPUTS[name], ext = inputsSS(), book = ext || ss, tab = re_text(settings()[spec.cfgTab]) || spec.tab, sh = book.getSheetByName(tab);
+    if (!sh) { if (spec.required) throw new Error('RE: tab "' + tab + '" is missing. Run menu > Recovery Engine > 1. Set up.'); return (memo[name] = []); }
     var key = 'in' + (PropertiesService.getScriptProperties().getProperty('RE_CACHE_V') || '0') + '_' + book.getId().slice(0, 12) + '_' + name + '_' + sh.getLastRow() + '_' + sh.getLastColumn();
     var rows = re_cacheGet(key);
-    if (!rows) { rows = re_readCols(sh, spec.need, spec.cols, tab); re_cachePut(key, rows); }
+    if (!rows) { rows = re_readCols(sh, spec.need, spec.cols, tab, 'outlet_id'); re_cachePut(key, rows); }
     return (memo[name] = rows);
   }
   var repo = {
@@ -179,27 +184,26 @@ function re_repo() {
     },
     users: function () { if (!memo.users) memo.users = re_rowsOf(re_ownTab(ss, 'USERS', RE_OWN_H.USERS)); return memo.users; },
     rows: function (tab) { if (!memo['t_' + tab]) memo['t_' + tab] = re_rowsOf(re_ownTab(ss, tab, re_svc().H[tab])); return memo['t_' + tab]; },
-    health: function () { return input('IN_STORE_HEALTH'); },
-    storeMetrics: function () { return input('IN_STORE_METRICS'); },
-    storeVariance: function () { return input('IN_STORE_VARIANCE'); },
+    health: function () { return input('COHORT'); },
+    storeMetrics: function () { return input('METRICS'); },
+    storeVariance: function () { return input('STORE_VARIANCE'); },
     exportSheet: function (title, pages, folderId) { return re_exportSheet(title, pages, folderId); },
-    captains: function () { return input('IN_CAPTAINS'); },
-    locations: function () { return input('IN_LOCATIONS'); },
-    audits: function () { return input('IN_AUDITS'); },
+    captains: function () { return input('CAPTAINS'); },
+    locations: function () { return input('LOCATIONS'); },
+    audits: function () { return input('AUDITS'); },
     sops: function () { if (!memo.sop) memo.sop = re_rowsOf(re_ownTab(ss, 'SOP', RE_OWN_H.SOP)); return memo.sop; },
-    raw: function () {
-      if (memo.raw) return memo.raw;
-      var sh = src().getSheetByName('RAWItemlevel');
-      if (!sh) throw new Error('RE: RAWItemlevel not found in the source sheet (C).');
-      var cols = RE_RAW_NEEDED.concat(RE_RAW_OPTIONAL);
-      return (memo.raw = re_readCols(sh, RE_RAW_NEEDED, cols, 'RAWItemlevel', 'outlet_id'));
-    },
+    raw: function () { return input('RAW'); },
+    /** Store names: STORE_MASTER where filled, otherwise the outlet_name / city that RAWItemlevel already carries. */
     storeMaster: function () {
       if (memo.master) return memo.master;
       var m = {};
-      re_rowsOf(src().getSheetByName('Store_Master')).forEach(function (r) {
+      input('RAW').forEach(function (r) {
         var id = re_text(r.outlet_id);
-        if (id) m[id] = {outlet_name: re_text(r.store_name), city: re_text(r.city), cluster: re_text(r.cluster), cm_sm: re_text(r.cms_sms)};
+        if (id && !m[id]) m[id] = {outlet_name: re_text(r.outlet_name) || id, city: re_text(r.city), cluster: '', region: '', cm_sm: ''};
+      });
+      input('MASTER').forEach(function (r) {
+        var id = re_text(r.outlet_id), o = m[id] = m[id] || {outlet_name: id, city: '', cluster: '', region: '', cm_sm: ''};
+        ['outlet_name', 'city', 'cluster', 'region', 'cm_sm', 'low_order_window'].forEach(function (k) { if (re_text(r[k])) o[k] = re_text(r[k]); });
       });
       return (memo.master = m);
     },
@@ -315,18 +319,46 @@ function RE_SETUP() {
   var add = REC.SETTINGS.filter(function (s) { return !have[s.key]; }).map(function (s) { return [s.key, '', String(s.def), s.label]; });
   if (add.length) cfg.getRange(cfg.getLastRow() + 1, 1, add.length, 4).setNumberFormat('@').setValues(add);
   cfg.autoResizeColumns(1, 3);
-  // Local IN_ tabs only when inputs are not read from another sheet.
+  // Input tabs (blue header) with the exact columns each query should produce.
   var inputsId = re_text(REC.resolveSettings(re_rowsOf(cfg)).settings.inputs_sheet_id);
-  if (!inputsId) Object.keys(RE_INPUTS).forEach(function (t) { re_ownTab(ss, t, RE_INPUTS[t].need); });
+  if (!inputsId) Object.keys(RE_INPUTS).forEach(function (k) {
+    var spec = RE_INPUTS[k];
+    if (ss.getSheetByName(spec.tab)) return;
+    var sh = ss.insertSheet(spec.tab);
+    sh.getRange(1, 1, 1, spec.cols.length).setValues([spec.cols]).setFontWeight('bold').setBackground('#1d4ed8').setFontColor('#ffffff');
+    sh.getRange(1, 1).setNote('INPUT TAB. Paste / sync here: ' + spec.fill + ' Keep a header row; columns are matched by name.');
+    sh.setFrozenRows(1);
+  });
+  re_startHere(ss);
   var sop = ss.getSheetByName('SOP');
   if (sop.getLastRow() < 2) sop.getRange(2, 1, RE_DEFAULT_SOP.length, 3).setValues(RE_DEFAULT_SOP);
   var users = ss.getSheetByName('USERS'), me = Session.getActiveUser().getEmail();
   if (users.getLastRow() < 2 && me) users.appendRow([me.toLowerCase(), 'PM', '', '', 'added by setup']);
-  // The V0.6 daily trigger points at a function that no longer exists; remove it.
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'IRD_DAILY_SNAPSHOT') ScriptApp.deleteTrigger(t); });
-  var msg = 'Recovery Engine ready. ' + add.length + ' settings added to CFG (blank value = default). Next: menu > Check data health.';
+  var msg = 'Recovery Engine is set up. Open the START_HERE tab: it lists which query goes into which blue tab.';
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) { console.log(msg); }
   return msg;
+}
+/** START_HERE tab: plain-language map of what to fill, written by setup. */
+function re_startHere(ss) {
+  var sh = ss.getSheetByName('START_HERE') || ss.insertSheet('START_HERE', 0);
+  sh.clear();
+  var rows = [['RECOVERY ENGINE: START HERE', '', '', ''], ['', '', '', ''],
+    ['Step', 'What to do', '', ''],
+    ['1', 'Fill the BLUE tabs below with your query results (paste, or point your sheet sync at the tab). Keep the header row.', '', ''],
+    ['2', 'Menu: Recovery Engine > 2. Check data health. Every required tab must say OK on the HEALTH tab.', '', ''],
+    ['3', 'Add people to the USERS tab (email, role SM / CM / PM, outlet_ids for SMs).', '', ''],
+    ['4', 'Extensions > Apps Script > Deploy > New deployment > Web app (Execute as: Me, Access: anyone in your organisation). Share that link.', '', ''],
+    ['5', 'Menu: Recovery Engine > 3. Turn on daily job (keeps the before / after numbers for results).', '', ''],
+    ['', '', '', ''], ['Blue tab', 'Fill with', 'Required?', 'What it unlocks']];
+  Object.keys(RE_INPUTS).forEach(function (k) { var s = RE_INPUTS[k]; rows.push([s.tab, s.fill, s.required ? 'REQUIRED' : 'optional', s.unlocks]); });
+  rows.push(['', '', '', ''], ['Green tabs', 'Written by the app. Do not edit them by hand (CFG, USERS and SOP you may edit).', '', '']);
+  sh.getRange(1, 1, rows.length, 4).setValues(rows).setWrap(true).setVerticalAlignment('top');
+  sh.getRange(1, 1).setFontSize(16).setFontWeight('bold');
+  sh.getRange(3, 1, 1, 4).setFontWeight('bold');
+  sh.getRange(10, 1, 1, 4).setFontWeight('bold').setBackground('#1d4ed8').setFontColor('#ffffff');
+  sh.setColumnWidth(1, 220); sh.setColumnWidth(2, 520); sh.setColumnWidth(3, 100); sh.setColumnWidth(4, 360);
+  ss.setActiveSheet(sh);
+  ss.moveActiveSheet(1);
 }
 /** Writes one row per input to HEALTH so anyone can see whether the data behind the app is complete and fresh. */
 function RE_HEALTH() {
@@ -340,14 +372,13 @@ function RE_HEALTH() {
         !rows.length ? 'No rows: features using this input are off.' : age !== null && age > 2 ? latest + ' is ' + age + ' days old.' : '']);
     } catch (e) { out.push([now, label, sourceName, 0, 0, '', 'ERROR', e.message]); }
   }
-  var st = REC.resolveSettings(repo.settingsRows()).settings, ext = re_text(st.inputs_sheet_id) ? 'inputs sheet: ' : 'this sheet: ';
-  check('Variance (RAWItemlevel)', 'C: RAWItemlevel', repo.raw, 'raw_synced_at');
-  check('Pilot cohort / store health', ext + (re_text(st.inputs_sheet_id) ? st.tab_health : 'IN_STORE_HEALTH'), repo.health, '');
-  check('Store health (PPI / TFR / R2A / surge)', ext + (re_text(st.inputs_sheet_id) ? st.tab_store_metrics : 'IN_STORE_METRICS'), repo.storeMetrics, 'metric_date');
-  check('Store variance history (3 months)', ext + (re_text(st.inputs_sheet_id) ? st.tab_store_variance : 'IN_STORE_VARIANCE'), repo.storeVariance, 'date_');
-  check('Captains', ext + (re_text(st.inputs_sheet_id) ? st.tab_captains : 'IN_CAPTAINS'), repo.captains, 'snapshot_date');
-  check('Locations + PPI evidence', ext + (re_text(st.inputs_sheet_id) ? st.tab_locations : 'IN_LOCATIONS'), repo.locations, '');
-  check('Audit sessions', ext + (re_text(st.inputs_sheet_id) ? st.tab_audits : 'IN_AUDITS'), repo.audits, 'audit_date_ist');
+  var st = REC.resolveSettings(repo.settingsRows()).settings;
+  var fns = {RAW: repo.raw, STORE_VARIANCE: repo.storeVariance, MASTER: function () { return Object.keys(repo.storeMaster()).map(function (k) { return {outlet_id: k}; }); },
+    COHORT: repo.health, METRICS: repo.storeMetrics, CAPTAINS: repo.captains, LOCATIONS: repo.locations, AUDITS: repo.audits};
+  Object.keys(RE_INPUTS).forEach(function (k) {
+    var spec = RE_INPUTS[k], tab = re_text(st[spec.cfgTab]) || spec.tab;
+    check(tab + (spec.required ? ' (required)' : ' (optional)'), spec.fill, fns[k], spec.date);
+  });
   var sh = re_ownTab(ss, 'HEALTH', RE_OWN_H.HEALTH);
   if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, RE_OWN_H.HEALTH.length).clearContent();
   sh.getRange(2, 1, out.length, RE_OWN_H.HEALTH.length).setValues(out);
@@ -369,7 +400,7 @@ function RE_CLEAR_CACHE() {
   return msg;
 }
 
-// ------------------------------------------------------------------ web app (called by IRD_App.html)
+// ------------------------------------------------------------------ web app (called by the App page)
 function RE_DAILY() { return re_svc().daily(re_repo()); }
 function RE_BOOT() { return re_svc().boot(re_repo()); }
 function RE_STORE(outletId) { return re_svc().store(re_repo(), outletId); }

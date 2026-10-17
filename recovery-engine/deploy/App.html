@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recovery Engine</title>
+<style>
+:root{--bg:#f3f5f4;--card:#fff;--ink:#16211c;--mute:#5f6d67;--line:#dde4e0;--brand:#0b5d44;--brand2:#e5f2ec;
+  --red:#b42318;--redbg:#fdecea;--amb:#9a5b06;--ambbg:#fff3dc;--grn:#13723a;--grnbg:#e6f5ea;--blu:#1d4ed8;--blubg:#e8eeff;--gry:#475467;--grybg:#eef1f0;
+  --l-aisle:#7c3aed;--l-rack:#c2410c;--l-loc:#0e7490;--l-search:#64748b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+button,select,input,textarea{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 16px;max-width:1080px;margin:0 auto}.logo{font-weight:800;white-space:nowrap}.logo span{color:var(--brand)}
+.bar select{flex:1;min-width:0;max-width:340px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.who{margin-left:auto;font-size:12px;color:var(--mute);white-space:nowrap}
+.tabs{display:flex;gap:2px;padding:0 12px;max-width:1080px;margin:0 auto;overflow-x:auto}
+.tab{border:0;background:none;padding:10px 12px;color:var(--mute);font-weight:600;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}.tab.on{color:var(--brand);border-color:var(--brand)}
+main{max-width:1080px;margin:0 auto;padding:12px 16px 90px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+h1{font-size:18px;margin:0}h2{font-size:15px;margin:0 0 8px}h3{font-size:11px;margin:12px 0 6px;color:var(--mute);text-transform:uppercase;letter-spacing:.5px}
+.sub{color:var(--mute);font-size:12px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1;min-width:0}.right{text-align:right}
+.steps{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}.step{flex:1;min-width:120px;border-radius:10px;padding:8px 10px;background:var(--card);border:1px solid var(--line);font-size:12px;color:var(--mute)}
+.step b{display:block;color:var(--ink);font-size:13px}.step.on{border-color:var(--brand);box-shadow:inset 0 -3px 0 var(--brand)}.step.done{background:var(--brand2)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.kpi{border:1px solid var(--line);border-radius:10px;padding:8px 10px}.kpi b{display:block;font-size:19px}.kpi small{color:var(--mute);font-size:11px}
+.chip{display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;white-space:nowrap;vertical-align:middle}
+.c-red{background:var(--redbg);color:var(--red)}.c-amb{background:var(--ambbg);color:var(--amb)}.c-grn{background:var(--grnbg);color:var(--grn)}.c-blu{background:var(--blubg);color:var(--blu)}.c-gry{background:var(--grybg);color:var(--gry)}
+.lv{color:#fff}.lv-AISLE{background:var(--l-aisle)}.lv-RACK{background:var(--l-rack)}.lv-LOCATION{background:var(--l-loc)}.lv-SEARCH{background:var(--l-search)}
+.stack{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--grybg);margin:8px 0 4px}.stack i{display:block;height:100%}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mute)}.legend span:before{content:"";display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;background:var(--c)}
+.hero{border-left:4px solid var(--brand);background:var(--brand2);border-radius:8px;padding:10px 12px;margin-top:10px}.hero b{font-size:15px}
+.btn{border:0;border-radius:9px;padding:10px 14px;min-height:44px;background:var(--brand);color:#fff;font-weight:700;cursor:pointer}.btn.ghost{background:var(--brand2);color:var(--brand)}.btn.sm{padding:6px 10px;font-size:12px;min-height:34px}.btn:disabled{opacity:.45;cursor:not-allowed}
+.list>div{display:flex;gap:10px;align-items:center;padding:9px 2px;border-top:1px solid var(--line)}.click{cursor:pointer}.click:hover{background:#f8fbf9}
+.crew{display:grid;grid-template-columns:24px 1fr 84px;gap:8px;align-items:center;padding:8px 2px;border-top:1px solid var(--line)}.crew.off{opacity:.55}
+.crew select{min-height:40px}.crew input[type=checkbox]{width:22px;height:22px}.loc{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;font-size:14px}
+.crew select,.field input,.field select,.field textarea,.inline input,.inline select{padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;width:100%}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}.field label{font-size:12px;font-weight:600}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.triad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.triad>div{border:1px solid var(--line);border-radius:10px;padding:10px}.triad b{font-size:17px;display:block}
+.sumbar{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);margin:12px -14px -14px;padding:10px 14px;border-radius:0 0 12px 12px}
+.cap{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mute);font-weight:600;background:#f8faf9}
+.scroll{overflow:auto;border:1px solid var(--line);border-radius:8px}
+.banner{border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px}.banner.amb{background:var(--ambbg);color:var(--amb)}.banner.red{background:var(--redbg);color:var(--red)}.banner.blu{background:var(--blubg);color:var(--blu)}
+.modal{position:fixed;inset:0;background:rgba(10,20,15,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}.sheet{background:#fff;width:100%;max-width:820px;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#16211c;color:#fff;padding:10px 14px;border-radius:10px;z-index:30;max-width:90vw}.toast.err{background:var(--red)}
+details summary{cursor:pointer;font-weight:600;font-size:13px;padding:6px 0}ol{margin:4px 0 0 18px;padding:0}li{margin:2px 0}
+.inline{display:grid;grid-template-columns:1fr 90px;gap:8px;align-items:center}
+@media(max-width:720px){.sumbar .triad{grid-template-columns:repeat(3,1fr);gap:6px}.sumbar .triad>div{padding:6px}.sumbar .triad b{font-size:14px}.sumbar .triad .sub{font-size:10px}.kpis{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.triad{grid-template-columns:1fr}.who{display:none}main{padding:10px 12px 90px}.hide-m{display:none}}
+</style>
+</head>
+<body>
+<div class="top"><div class="bar"><div class="logo">Recovery <span>Engine</span></div><select id="store" aria-label="Store"></select><div class="who" id="who"></div></div><div class="tabs" id="tabs"></div></div>
+<main id="main"><div class="card">Loading…</div></main>
+<script>
+<?!= coreSrc ?>
+var REC = RE_CORE_FACTORY();
+</script>
+<script>
+(function () {
+'use strict';
+const INITIAL = '<?= initialStore ?>';
+const S = {boot: null, d: null, outlet: '', view: 'today', crew: [], skip: {}, showAll: false, cm: null, cmOpen: '', tower: null, extra: '', settings: null, exportFile: null};
+const token = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+const $ = id => document.getElementById(id);
+const esc = x => String(x === null || x === undefined ? '' : x).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const rs = x => (x === null || x === undefined || isNaN(Number(x))) ? '–' : '₹' + Math.round(Number(x)).toLocaleString('en-IN');
+const n1 = x => (x === null || x === undefined || isNaN(Number(x))) ? '–' : (Math.round(Number(x) * 10) / 10).toString();
+const pct = x => x === null || x === undefined ? '–' : x + '%';
+const em = e => (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, '').replace(/^RE:\s*/, '');
+function api(fn, arg) {
+  return new Promise((ok, bad) => {
+    if (window.google && google.script && google.script.run) google.script.run.withSuccessHandler(ok).withFailureHandler(bad)[fn](arg);
+    else if (window.RE_MOCK && RE_MOCK[fn]) setTimeout(() => { try { ok(RE_MOCK[fn](arg)); } catch (e) { bad(e); } }, 60);
+    else bad(new Error('No server'));
+  });
+}
+function toast(m, err) { const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), err ? 6000 : 2500); }
+const TONE = {TOP25: 'c-red', TOP100: 'c-amb', RANKED: 'c-gry', REDUCED: 'c-grn', NEW_MONTH: 'c-gry', SEVERELY_BROKEN: 'c-red', CONSTRAINED: 'c-red', HEALTHY: 'c-grn', MATCHED: 'c-grn', QUALITY_GAP: 'c-amb', OFF_PLAN: 'c-gry', BASELINE: 'c-blu', BROKEN: 'c-red', AT_RISK: 'c-amb', SORTED: 'c-grn', CONTROL: 'c-blu', P0: 'c-red', P1: 'c-red', P2: 'c-amb', P3: 'c-amb', P4: 'c-gry', EV: 'c-blu',
+  A: 'c-grn', B: 'c-blu', C: 'c-gry', NEW: 'c-gry', PROXY: 'c-gry', FOUND: 'c-grn', CLEARED: 'c-grn', OPEN: 'c-amb', NOT_IN_FEED: 'c-gry', BETTER: 'c-grn', SUSTAINED: 'c-grn',
+  WORSE: 'c-red', RELAPSED: 'c-red', FLAT: 'c-gry', PENDING: 'c-gry', NO_DATA: 'c-gry', NO_BASELINE: 'c-gry', NO_PLAN: 'c-amb', NO_ACTUALS: 'c-red', LOW_ADHERENCE: 'c-red',
+  LOW_EXECUTION: 'c-red', NO_YIELD: 'c-amb', IN_PROGRESS: 'c-blu', ON_TRACK: 'c-grn', PILFERAGE: 'c-red', MISPLACED: 'c-amb', AUDIT_GAP: 'c-blu', OTHER: 'c-gry'};
+const chip = (s, l) => '<span class="chip ' + (TONE[s] || 'c-gry') + '">' + esc(l || String(s).replace(/_/g, ' ')) + '</span>';
+const lv = t => '<span class="chip lv lv-' + t.level + '">' + esc(t.label) + '</span>';
+const SRC = {PILFERAGE: 'Pilferage-prone', MISPLACED: 'Audit found it short (NEG location)', AUDIT_GAP: 'Never audited', OTHER: 'Other'};
+const LVC = {AISLE: 'var(--l-aisle)', RACK: 'var(--l-rack)', LOCATION: 'var(--l-loc)', SEARCH: 'var(--l-search)'};
+
+// ---------------------------------------------------------------- boot / load
+function start() {
+  api('RE_BOOT').then(b => {
+    S.boot = b;
+    const sel = $('store');
+    sel.innerHTML = b.stores.map(s => '<option value="' + esc(s.outlet_id) + '">' + esc(s.outlet_id + ' · ' + s.outlet_name.replace(/^SS |^LT /, '') + ' · ' + s.region) + '</option>').join('');
+    const init = INITIAL && INITIAL.indexOf('<?') < 0 ? INITIAL : '';
+    S.outlet = b.stores.some(s => s.outlet_id === init) ? init : (b.stores[0] || {}).outlet_id;
+    sel.value = S.outlet;
+    sel.onchange = () => { S.outlet = sel.value; S.exportFile = null; S.view = ['cm', 'tower', 'settings'].indexOf(S.view) >= 0 ? 'today' : S.view; load(); };
+    $('who').textContent = b.me + ' · ' + b.role;
+    if (!b.stores.length) { $('main').innerHTML = '<div class="card">No stores found. Check pilot_outlets in CFG.</div>'; return; }
+    if (b.role === 'PM' && !init) S.view = 'tower'; else if (b.role === 'CM' && !init) S.view = 'cm';
+    if (S.view === 'today') load(); else render();
+  }).catch(e => { $('main').innerHTML = '<div class="card"><h2>Could not start</h2><p>' + esc(em(e)) + '</p></div>'; });
+}
+function load() {
+  $('main').innerHTML = '<div class="card">Loading store ' + esc(S.outlet) + '…</div>';
+  api('RE_STORE', S.outlet).then(d => { setStore(d); render(); }).catch(e => { S.d = null; render(); toast(em(e), true); });
+}
+function setStore(d) {
+  S.d = d; S.skip = {}; S.showAll = false;
+  S.crew = d.roster.map(c => { const s = d.suggestion.crew.find(x => x.name === c.name); return {name: c.name, on: !!s, hours: s ? s.hours : d.settings.max_hours_per_captain}; });
+}
+function tabs() {
+  const r = S.boot.role, t = [['today', 'Today'], ['history', 'Store results']];
+  if (r !== 'SM') t.push(['cm', 'Cluster review']);
+  if (r === 'PM') t.push(['tower', 'Control tower'], ['settings', 'Settings & log']);
+  $('tabs').innerHTML = t.map(x => '<button class="tab' + (S.view === x[0] ? ' on' : '') + '" data-v="' + x[0] + '">' + x[1] + '</button>').join('');
+  document.querySelectorAll('.tab').forEach(b => { b.onclick = () => { S.view = b.dataset.v; if ((S.view === 'today' || S.view === 'history') && !S.d) load(); else render(); }; });
+}
+function render() {
+  tabs();
+  const v = S.view;
+  if (v === 'cm' && !S.cm) { $('main').innerHTML = '<div class="card">Loading cluster…</div>'; api('RE_CM').then(q => { S.cm = q; render(); }).catch(e => toast(em(e), true)); return; }
+  if (v === 'tower' && !S.tower) { $('main').innerHTML = '<div class="card">Loading control tower…</div>'; api('RE_TOWER').then(q => { S.tower = q; render(); }).catch(e => toast(em(e), true)); return; }
+  if (v === 'settings' && !S.settings) { $('main').innerHTML = '<div class="card">Loading settings…</div>'; api('RE_SETTINGS').then(q => { S.settings = q; render(); }).catch(e => toast(em(e), true)); return; }
+  if ((v === 'today' || v === 'history') && !S.d) { $('main').innerHTML = '<div class="card">Store could not be loaded.</div>'; return; }
+  $('main').innerHTML = v === 'today' ? today() : v === 'history' ? history() : v === 'cm' ? cluster() : v === 'settings' ? settingsView() : tower();
+  wire();
+}
+
+// ---------------------------------------------------------------- planning maths (same Core as the server)
+function myCrew() { return S.crew.filter(c => c.on && c.name.trim()).map(c => ({name: c.name.trim(), hours: Number(c.hours)})); }
+function plans() {
+  const d = S.d;
+  return {sugg: REC.allocate(d.diagnosis.tasks, d.suggestion.crew, d.roster, []), mine: REC.allocate(d.diagnosis.tasks, myCrew(), d.roster, Object.keys(S.skip))};
+}
+const changes = p => REC.planDiff(p.sugg, p.mine);
+
+// ---------------------------------------------------------------- Today
+function stepStrip(stage) {
+  const st = [['Diagnose', 'what is broken'], ['Plan', 'crew + hours'], ['Execute', 'print captain sheets'], ['Close & measure', 'actual vs plan']];
+  return '<div class="steps">' + st.map((x, i) => '<div class="step' + (i === stage ? ' on' : i < stage ? ' done' : '') + '"><b>' + (i + 1) + '. ' + x[0] + '</b>' + x[1] + '</div>').join('') + '</div>';
+}
+function today() {
+  const d = S.d, tp = d.today_plan;
+  let h = '';
+  if (d.freshness.status !== 'CURRENT') h += '<div class="banner amb">' + esc(d.freshness.label) + '. Check that RAWItemlevel refreshed today.</div>';
+  if (tp) {
+    const logged = tp.measure.actual.logged;
+    h += stepStrip(logged ? 3 : 2) + execute(tp) + closeShift(tp) + (logged ? measureCard(tp.measure, true) : '');
+    h += '<div class="card"><details><summary>Re-plan today (replaces ' + esc(tp.plan.plan_id) + ')</summary>' + diagnoseCard() + planCard(true) + '</details></div>';
+    return h;
+  }
+  return h + stepStrip(S.planning ? 1 : 0) + diagnoseCard() + planCard(false);
+}
+
+function diagnoseCard() {
+  const d = S.d, s = d.store, sev = d.severity, g = d.diagnosis, bl = g.by_level, mode = bl[g.mode];
+  const total = Object.keys(bl).reduce((v, k) => v + bl[k].value, 0) || 1;
+  const modeText = {AISLE: 'Aisle reset: variance is spread across whole aisles, so item-by-item search will not hold.',
+    RACK: 'Rack sweep: variance clusters in a few racks. Sweep those racks fully instead of chasing items.',
+    LOCATION: 'Targeted item recovery: variance is scattered. Check the exact NEG / probable locations.'}[g.mode];
+  let h = '<div class="card"><h1>' + esc(s.outlet_name) + '</h1><div class="sub">' + esc([s.outlet_id, s.region, s.cm_sm, 'feed ' + d.summary.feed_date].filter(Boolean).join(' · ')) + '</div><div class="row" style="margin-top:6px">' +
+    (s.cohort ? chip(s.cohort, 'Pilot: ' + s.cohort) + ' ' : '') + chip(sev.tier) + (sev.capacity ? ' ' + chip(sev.capacity === 'HEALTHY' ? 'HEALTHY' : sev.capacity === 'CONSTRAINED' ? 'CONSTRAINED' : 'AT_RISK', 'capacity ' + sev.capacity.replace('_', ' ').toLowerCase()) : '') + '</div>' +
+    (sev.reasons.length ? '<div class="sub" style="margin-top:4px">Why ' + esc(sev.tier.replace('_', ' ').toLowerCase()) + ': ' + esc(sev.reasons.join(' · ')) + '</div>' : '') +
+    (sev.metrics ? '<div class="sub">Store health ' + esc(sev.metrics.date) + ': PPI ' + n1(sev.metrics.ppi) + 's · TFR ' + n1(sev.metrics.tfr_pct) + '% · R2A ' + n1(sev.metrics.r2a_sec) + 's · surge ' + n1(sev.metrics.surge_pct) + '%</div>' : '') +
+    '<div class="kpis"><div class="kpi"><b>' + rs(d.summary.total_absolute_pending) + '</b><small>absolute pending</small></div>' +
+    (d.summary.has_audit_columns ? '<div class="kpi"><b>' + d.summary.priority_counts.P0 + '</b><small>fresh negatives (T-1)</small></div>'
+      : '<div class="kpi"><b>' + rs(d.diagnosis.sources.filter(x => x.source === 'PILFERAGE').reduce((v, x) => v + x.value, 0)) + '</b><small>pilferage-prone ₹</small></div>') +
+    '<div class="kpi"><b>' + d.summary.worklist_skus + '</b><small>SKUs on worklist · ' + rs(d.summary.worklist_value) + '</small></div>' +
+    '<div class="kpi"><b>' + n1(g.total_hours) + ' h</b><small>to clear everything</small></div></div>' +
+    '<div class="hero"><div class="sub">Recommended recovery</div><b>' + esc(mode.label) + '</b> · ' + mode.share_pct + '% of variance ₹<div class="sub" style="margin-top:2px">' + esc(modeText) + '</div></div>' +
+    '<div class="stack">' + Object.keys(bl).map(k => bl[k].value ? '<i style="width:' + (100 * bl[k].value / total) + '%;background:' + LVC[k] + '" title="' + esc(bl[k].label) + '"></i>' : '').join('') + '</div>' +
+    '<div class="legend">' + Object.keys(bl).filter(k => bl[k].tasks).map(k => '<span style="--c:' + LVC[k] + '">' + esc(bl[k].label) + ' ' + bl[k].tasks + ' · ' + bl[k].share_pct + '%</span>').join('') + '</div>';
+  if (sev.capacity === 'CONSTRAINED') h += '<div class="banner amb" style="margin-top:10px">Capacity is constrained (slow R2A and surge). Plan recovery in the low-order window and keep hours tight.</div>';
+  if (g.full_recon) h += '<div class="banner red" style="margin-top:10px"><b>' + g.broken_aisles + ' broken aisles.</b> Daily recovery will not catch up. Ask your CM for a full inventory reconciliation.</div>';
+  if (g.sources.length) h += '<h3>Where the variance comes from (provisional)</h3><div class="row">' + g.sources.map(x => chip(x.source, (SRC[x.source] || x.source) + ' · ' + x.items + ' · ' + rs(x.value))).join(' ') + '</div>' +
+    (g.sources.some(x => x.source === 'PILFERAGE') ? '<div class="sub" style="margin-top:4px">Pilferage-prone items: create a location audit on their locations every day, not only on recovery days.</div>' : '');
+  h += '<h3>What to fix, in order</h3><div class="list">' + g.tasks.slice(0, S.showAll ? 999 : 6).map(t => taskRow(t, false)).join('') + '</div>' +
+    (g.tasks.length > 6 && !S.showAll ? '<button class="btn ghost sm" data-act="showall" style="margin-top:8px">Show all ' + g.tasks.length + '</button>' : '') + '</div>';
+  return h;
+}
+function taskRow(t, withSkip) {
+  return '<div><div class="grow click" data-task="' + esc(t.task_id) + '">' + lv(t) + ' <b class="mono">' + esc(t.level === 'SEARCH' ? '' : t.target) + '</b> ' + (t.level === 'SEARCH' ? '<b>' + esc(t.target) + '</b> ' : '') + chip(t.best_priority) +
+    '<div class="sub">' + esc(t.reason) + '</div><div class="sub">' + t.item_count + ' items · ' + (t.location_count ? t.location_count + ' locations · ' : '') + n1(t.est_hours) + ' h</div></div>' +
+    '<div class="right"><b>' + rs(t.value) + '</b>' + (withSkip ? '<div><button class="btn sm ' + (S.skip[t.task_id] ? '' : 'ghost') + '" data-skip="' + esc(t.task_id) + '">' + (S.skip[t.task_id] ? 'Skipped' : 'Skip') + '</button></div>' : '') + '</div></div>';
+}
+
+function planCard(replace) {
+  const d = S.d, p = plans(), sg = p.sugg, mi = p.mine, diff = changes(p);
+  const byName = {};
+  d.roster.forEach(r => { byName[r.name] = r; });
+  const shown = S.crew.filter((c, i) => S.showCrew || c.on || i < 8);
+  let h = '<div class="card"><h2>' + (replace ? 'New plan for today' : 'Plan today\'s recovery') + '</h2><p class="sub">Your strongest accurate auditors who were present yesterday are already ticked, and the work is split between them. ' +
+    'Change anything you like. You know your floor; the suggestion is only kept for comparison.</p>' +
+    (d.store.low_order_window ? '<div class="banner blu">Best window for this store: <b>' + esc(d.store.low_order_window) + '</b> (lowest orders).</div>' : '') +
+    '<h3>Crew · suggested ' + n1(d.suggestion.budget_hours) + ' h</h3>' +
+    shown.map(c => {
+      const r = byName[c.name] || {}, i = S.crew.indexOf(c);
+      const stats = r.rated ? 'IAPH ' + n1(r.iaph) + ' · bad ' + (r.bad_audit_pct === null ? '–' : r.bad_audit_pct + '%') + ' · ' + r.audits_30d + ' audits' : esc(r.basis || '');
+      return '<div class="crew' + (c.on ? '' : ' off') + '"><input type="checkbox" data-con="' + i + '"' + (c.on ? ' checked' : '') + ' aria-label="Use ' + esc(c.name) + '">' +
+        '<div><b>' + esc(c.name) + '</b> ' + chip(r.tier || 'NEW', !r.tier || r.tier === 'NEW' ? 'unrated' : r.tier === 'PROXY' ? 'proxy' : 'Tier ' + r.tier) + (r.complex_ready ? ' ' + chip('A', 'sweeps') : '') + (r.present_t1 === false ? ' ' + chip('C', 'not in T-1') : '') +
+        '<div class="sub">' + (r.score ? 'Score ' + r.score + ' · ' : '') + stats + (r.designation ? ' · ' + esc(r.designation) : '') + '</div></div>' +
+        '<select data-chours="' + i + '"' + (c.on ? '' : ' disabled') + '>' + hourOpts(c.hours) + '</select></div>';
+    }).join('') +
+    (S.crew.length > shown.length ? '<button class="btn ghost sm" data-act="showcrew">Show all ' + S.crew.length + ' captains</button> ' : '') +
+    '<div class="row" style="margin-top:8px"><input id="extra" placeholder="Add a captain not listed" value="' + esc(S.extra) + '" style="flex:1;padding:7px 8px;border:1px solid var(--line);border-radius:8px"><button class="btn ghost sm" data-act="addcrew">Add</button></div>';
+  if (mi.complex_without_ready) h += '<div class="banner amb" style="margin-top:10px">No captain in your crew is cleared for rack/aisle sweeps (bad-audit % above limit or not approved). Sweeps are still assigned; expect lower accuracy.</div>';
+  if (mi.hours && mi.used_hours < mi.hours - 0.5) h += '<div class="banner amb" style="margin-top:10px">' + n1(mi.hours - mi.used_hours) + ' h of crew time has no work: there are fewer tasks than hours. Reduce hours and use them elsewhere.</div>';
+  h += '<h3>Tasks · skip what you cannot do today</h3><div class="list">' + d.diagnosis.tasks.slice(0, 12).map(t => taskRow(t, true)).join('') + '</div>' +
+    (d.diagnosis.tasks.length > 12 ? '<div class="sub">+ ' + (d.diagnosis.tasks.length - 12) + ' lower-priority tasks stay in backlog.</div>' : '');
+  h += '<h3>Who does what</h3>' + crewSplit(mi, d.diagnosis.tasks);
+  h += '<div class="sumbar"><div class="triad" style="margin-bottom:8px">' +
+    '<div><span class="sub">Suggested</span><b>' + n1(sg.used_hours) + ' h</b><span class="sub">' + sg.crew.length + ' captains · ' + sg.locations + ' loc · ' + rs(sg.value) + '</span></div>' +
+    '<div><span class="sub">Your plan</span><b>' + n1(mi.used_hours) + ' h</b><span class="sub">' + mi.crew.length + ' captains · ' + mi.locations + ' loc · ' + rs(mi.value) + '</span></div>' +
+    '<div><span class="sub">Not covered today</span><b>' + rs(Math.max(0, d.summary.worklist_value - mi.value)) + '</b><span class="sub">' + mi.deferred.length + ' tasks to backlog</span></div></div>' +
+    (diff ? '<div class="sub" style="margin-bottom:8px">Your changes: ' + esc(diff) + '</div>' : '') +
+    '<div class="row"><input id="win" placeholder="Window, e.g. 14:00-17:00" value="' + esc(S.win || d.store.low_order_window || '') + '" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">' +
+    '<button class="btn" data-act="confirm"' + (mi.lines.length ? '' : ' disabled') + '>' + (replace ? 'Replace today\'s plan' : 'Confirm plan') + '</button></div></div></div>';
+  return h;
+}
+function hourOpts(v) { let o = ''; for (let x = 0.5; x <= S.d.settings.max_hours_per_captain + 1e-6; x += 0.5) o += '<option value="' + x + '"' + (Math.abs(x - v) < 1e-6 ? ' selected' : '') + '>' + x + ' h</option>'; return o; }
+function crewSplit(plan, tasks) {
+  const byId = {};
+  tasks.forEach(t => { byId[t.task_id] = t; });
+  if (!plan.lines.length) return '<div class="sub">Tick at least one captain.</div>';
+  return plan.crew.filter(c => c.used > 0).map(c => '<div class="cap"><div class="row"><b class="grow">' + esc(c.name) + '</b><span class="sub">' + n1(c.used) + ' of ' + n1(c.hours) + ' h</span></div>' +
+    plan.lines.filter(l => l.captain === c.name).map(l => { const t = byId[l.task_id]; return '<div class="sub">' + lv(t) + ' ' + esc(t.level === 'SEARCH' ? t.target : t.target) + (l.share < 0.99 ? ' · ~' + Math.round(l.share * 100) + '% of it' : '') + ' · ' + n1(l.hours) + ' h</div>'; }).join('') + '</div>').join('');
+}
+
+// ---------------------------------------------------------------- Execute
+function execute(tp) {
+  const d = S.d, p = tp.plan, byId = {}, caps = [];
+  tp.tasks.forEach(t => { byId[t.task_id] = t; });
+  tp.lines.forEach(l => { if (caps.indexOf(l.captain) < 0) caps.push(l.captain); });
+  let h = '<div class="card"><div class="row"><div class="grow"><h2 style="margin:0">Today\'s plan · ' + esc(p.plan_id) + '</h2><div class="sub">Confirmed ' + esc(p.confirmed_at) + ' by ' + esc(p.confirmed_by) + (p.window ? ' · window ' + esc(p.window) : '') +
+    (p.changes_vs_suggested ? ' · your changes: ' + esc(p.changes_vs_suggested) : '') + '</div></div>' + chip('ON_TRACK', 'CONFIRMED') + '</div>' +
+    '<p class="sub">Print one page per captain and hand it over. For rack and aisle sweeps, create the location audits on your HHD before you assign them.</p>' +
+    '<div class="row"><button class="btn" data-act="export">Make printable sheet</button><button class="btn ghost" data-act="printhere">Print here</button></div>' +
+    (S.exportFile ? '<div class="banner blu" style="margin-top:8px">Ready: <a href="' + esc(S.exportFile.url) + '" target="_blank">open the sheet</a> · <a href="' + esc(S.exportFile.pdf_url) + '" target="_blank"><b>download PDF (one page per captain)</b></a></div>' : '');
+  caps.forEach(c => {
+    const mine = tp.lines.filter(l => l.captain === c), hrs = mine.reduce((v, l) => v + l.hours, 0);
+    h += '<div class="cap"><div class="row"><b class="grow">' + esc(c) + '</b><span class="sub">' + n1(hrs) + ' h</span></div>' +
+      mine.map(l => { const t = byId[l.task_id]; if (!t) return ''; return '<details><summary>' + lv(t) + ' ' + esc(t.target) + (l.share < 0.99 ? ' · ~' + Math.round(l.share * 100) + '%' : '') + ' · ' + n1(l.hours) + ' h</summary>' + taskDetail(t) + '</details>'; }).join('') + '</div>';
+  });
+  if (d.settings.recovery_app_url) h += '<div style="margin-top:10px"><a class="btn ghost sm" href="' + esc(d.settings.recovery_app_url) + '" target="_blank">Record item outcomes in the Recovery App</a></div>';
+  return h + '</div>';
+}
+function taskDetail(t) {
+  const sop = S.d.sops[t.level] || [];
+  return '<div class="sub" style="margin:4px 0">' + esc(t.reason) + '</div>' +
+    (t.level === 'LOCATION' ? '<div>' + t.location_list.map(x => '<span class="loc">' + esc(x.location_id) + '</span>' + (x.type === 'NEG' ? ' <span class="sub">(NEG, first)</span>' : '')).join('<br>') + '</div>' : '') +
+    (t.items.length ? '<table style="margin-top:6px"><tr><th>Item to look for</th><th class="right">Qty</th><th class="right">₹</th></tr>' + t.items.slice(0, 15).map(x => '<tr><td>' + esc(x.item_name) + (t.level === 'SEARCH' && x.upc ? '<div class="sub mono">UPC ' + esc(x.upc) + '</div>' : '') + '</td><td class="right">' + n1(x.variance_qty) + '</td><td class="right">' + rs(x.variance) + '</td></tr>').join('') + '</table>' : '') +
+    (sop.length ? '<div class="sub" style="margin-top:6px"><b>How (HHD)</b></div><ol class="sub">' + sop.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol>' : '');
+}
+
+// ---------------------------------------------------------------- Close shift
+function closeShift(tp) {
+  const m = tp.measure, act = {}, caps = [];
+  m.actual.rows.forEach(a => { act[a.captain] = a; });
+  tp.lines.forEach(l => { if (caps.indexOf(l.captain) < 0) caps.push(l.captain); });
+  Object.keys(act).forEach(c => { if (caps.indexOf(c) < 0) caps.push(c); });
+  const byId = {};
+  tp.tasks.forEach(t => { byId[t.task_id] = t; });
+  let h = '<div class="card"><h2>Close the shift' + (m.actual.logged ? ' · logged' : '') + '</h2><p class="sub">Enter what actually happened. This is the "actual" in suggested vs planned vs actual. Audit data is checked separately.</p>';
+  caps.forEach((c, i) => {
+    const a = act[c] || {}, mine = tp.lines.filter(l => l.captain === c), planned = mine.reduce((v, l) => v + l.hours, 0);
+    h += '<div class="cap" data-cap="' + esc(c) + '"><div class="inline"><b>' + esc(c) + ' <span class="sub">planned ' + n1(planned) + ' h</span></b><input type="number" step="0.25" min="0" max="12" data-ah="' + i + '" value="' + (a.actual_hours !== undefined ? a.actual_hours : '') + '" placeholder="hours"></div>' +
+      mine.map(l => { const t = byId[l.task_id], v = (a.tasks || {})[l.task_id] || ''; return '<div class="inline" style="margin-top:6px"><span class="sub">' + lv(t) + ' ' + esc(t.target) + '</span><select data-ts="' + i + '" data-tid="' + esc(l.task_id) + '">' +
+        ['', 'DONE', 'PARTIAL', 'NOT_DONE'].map(x => '<option value="' + x + '"' + (x === v ? ' selected' : '') + '>' + (x ? x.replace('_', ' ').toLowerCase() : 'status') + '</option>').join('') + '</select></div>'; }).join('') +
+      '<input data-note="' + i + '" placeholder="Note (optional)" value="' + esc(a.note || '') + '" style="margin-top:6px;width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:8px"></div>';
+  });
+  return h + '<div class="row" style="margin-top:10px"><button class="btn" data-act="actuals">' + (m.actual.logged ? 'Update actuals' : 'Save actuals') + '</button></div></div>';
+}
+
+// ---------------------------------------------------------------- Measure
+function measureCard(m, full) {
+  const a = m.adherence, r = m.recovery, o = m.outcome, ob = m.observed;
+  let h = '<div class="card"><div class="row"><h2 class="grow" style="margin:0">Suggested vs planned vs actual · ' + esc(m.plan_date) + '</h2>' + chip(o.overall) + '</div>' +
+    '<div class="triad" style="margin-top:10px"><div><span class="sub">Suggested</span><b>' + n1(m.suggested.hours) + ' h</b><span class="sub">' + m.suggested.captains + ' captains · ' + m.suggested.tasks + ' tasks</span></div>' +
+    '<div><span class="sub">Planned</span><b>' + n1(m.planned.hours) + ' h</b><span class="sub">' + m.planned.captains + ' captains · ' + m.planned.tasks + ' tasks · ' + pct(a.plan_vs_suggested_hours_pct) + ' of suggested</span></div>' +
+    '<div><span class="sub">Actual (SM log)</span><b>' + (m.actual.logged ? n1(m.actual.hours) + ' h' : 'not logged') + '</b><span class="sub">' + (m.actual.logged ? pct(a.actual_vs_planned_hours_pct) + ' of planned · ' + n1(m.actual.tasks_done) + ' tasks done' : 'close the shift to fill this') + '</span></div></div>' +
+    '<div class="kpis"><div class="kpi"><b>' + pct(a.crew_overlap_pct) + '</b><small>suggested captains used</small></div>' +
+    '<div class="kpi"><b>' + (ob ? ob.locations_audited + ' / ' + ob.locations_planned : '–') + '</b><small>planned locations audited (audit data)</small></div>' +
+    '<div class="kpi"><b>' + r.recovered_items + ' / ' + r.planned_items + '</b><small>items recovered (feed) · ' + rs(r.recovered_value) + '</small></div>' +
+    '<div class="kpi"><b>' + rs(m.rupees_per_hour) + '</b><small>recovered per actual man-hour</small></div></div>' +
+    (m.changes ? '<div class="sub" style="margin-top:8px">SM changes vs suggestion: ' + esc(m.changes) + '</div>' : '') +
+    (ob ? '<h3>Audit evidence on ' + esc(m.plan_date) + ' (from audit data)</h3><div class="row">' + ['MATCHED', 'QUALITY_GAP', 'OFF_PLAN', 'BASELINE'].map(k => chip(k, {MATCHED: 'Matched', QUALITY_GAP: 'Quality gap', OFF_PLAN: 'Off-plan', BASELINE: 'Before plan (not counted)'}[k] + ' ' + ob.counts[k])).join(' ') + '</div>' +
+      '<div class="sub" style="margin-top:4px">Matched = planned location, scan coverage at or above the quality gate. Quality gap = planned but under-scanned. Off-plan = audits elsewhere after the plan.</div>' +
+      (full && ob.events.length ? '<details><summary>Audit sessions (' + ob.events.length + ')</summary><div class="scroll"><table><tr><th>Location</th><th>Finished</th><th class="right">Coverage</th><th>Result</th></tr>' +
+        ob.events.slice(0, 120).map(x => '<tr><td class="mono">' + esc(x.location_id) + '</td><td>' + esc(String(x.end_time).slice(11, 16)) + '</td><td class="right">' + (x.coverage_pct === null ? '–' : x.coverage_pct + '%') + '</td><td>' + chip(x.class) + '</td></tr>').join('') + '</table></div></details>' : '') : '');
+  if (full && S.d && S.d.nudge) h += '<div class="banner blu" style="margin-top:10px">' + esc(S.d.nudge) + '</div>';
+  if (full) h += '<h3>Store variance after recovery</h3><table><tr><th>Check</th><th class="right">Absolute pending</th><th class="right">vs baseline</th><th>State</th></tr>' +
+    '<tr><td>Baseline ' + esc(o.baseline ? o.baseline.date : '') + '</td><td class="right">' + (o.baseline ? rs(o.baseline.value) : '–') + '</td><td></td><td></td></tr>' +
+    [['T+' + S.boot.settings.t3_offset, o.t3], ['T+' + S.boot.settings.t7_offset, o.t7]].map(x => '<tr><td>' + x[0] + ' · ' + esc(x[1].date) + '</td><td class="right">' + rs(x[1].value) + '</td><td class="right">' + (x[1].change_pct === undefined || x[1].change_pct === null ? '–' : x[1].change_pct + '%') + '</td><td>' + chip(x[1].state) + '</td></tr>').join('') + '</table>' +
+    '<p class="sub">Recovered = the variance feed shows an audit increment after the plan date, or the item\'s open variance fell or cleared. SM logs never count as recovery.' +
+    (r.left_feed_value ? ' ' + rs(r.left_feed_value) + ' of planned items left the ranked feed (likely cleared, not counted until confirmed).' : '') + '</p>';
+  if (full && r.items.length) h += '<details><summary>Planned items (' + r.items.length + ')</summary><div class="scroll"><table><tr><th>Item</th><th>Status</th><th class="right">₹ at plan</th><th class="right">₹ now</th></tr>' +
+    r.items.map(x => '<tr><td>' + chip(x.priority) + ' ' + esc(x.item_name) + '</td><td>' + chip(x.status) + '</td><td class="right">' + rs(x.baseline_variance) + '</td><td class="right">' + (x.current_variance === null ? '–' : rs(x.current_variance)) + '</td></tr>').join('') + '</table></div></details>';
+  return h + '</div>';
+}
+function history() {
+  const hs = S.d.history;
+  if (!hs.length) return '<div class="card"><h2>No plans yet</h2><p class="sub">Results appear after the first confirmed plan.</p></div>';
+  return hs.map(m => measureCard(m, m === hs[0])).join('');
+}
+
+// ---------------------------------------------------------------- CM
+function cluster() {
+  const rows = S.cm.rows;
+  let h = '<div class="card"><h1>Cluster review</h1><p class="sub">Are man-hours going into recovery that works? ' + rows.filter(r => r.flag.sev === 1).length + ' stores need you · last 7 days</p>' +
+    '<div class="scroll"><table><tr><th>Store</th><th>State</th><th class="right">Pending</th><th class="right hide-m">Hours S / P / A</th><th class="right">₹ / hour</th><th>Flag</th></tr>' +
+    rows.map(r => '<tr class="click" data-cm="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.outlet_id + ' · ' + r.region) + '</div></td><td>' + chip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + '</div></td>' +
+      '<td class="right">' + rs(r.pending) + '</td><td class="right hide-m">' + n1(r.window.suggested_hours) + ' / ' + n1(r.window.planned_hours) + ' / ' + n1(r.window.actual_hours) + '</td><td class="right">' + rs(r.window.rupees_per_hour) + '</td><td>' + chip(r.flag.code) + '</td></tr>').join('') + '</table></div></div>';
+  const r = rows.find(x => x.outlet_id === S.cmOpen);
+  if (r) {
+    h += '<div class="card" id="cmpanel"><div class="row"><h2 class="grow" style="margin:0">' + esc(r.outlet_name) + '</h2>' + chip(r.flag.code) + '</div><p class="sub">' + esc(r.flag.text) + '</p>' +
+      (r.measure ? measureCard(r.measure, false) : '<p class="sub">No plan yet.</p>') +
+      (r.last_review ? '<div class="banner blu">Last decision ' + esc(r.last_review.reviewed_at) + ' by ' + esc(r.last_review.reviewed_by) + ': ' + esc(r.last_review.decision) + (r.last_review.owner ? ' · owner ' + esc(r.last_review.owner) : '') + '</div>' : '') +
+      '<div class="two"><div class="field"><label>Decision</label><select id="cmdec">' + S.cm.decisions.map(x => '<option>' + esc(x) + '</option>').join('') + '</select></div><div class="field"><label>Owner</label><input id="cmown"></div></div>' +
+      '<div class="two"><div class="field"><label>Next review</label><input type="date" id="cmdate"></div><div class="field"><label>Note</label><input id="cmnote"></div></div>' +
+      '<button class="btn" data-act="cmsave">Record decision</button> <button class="btn ghost" data-open="' + esc(r.outlet_id) + '">Open store</button></div>';
+  }
+  return h;
+}
+
+// ---------------------------------------------------------------- PM
+function tower() {
+  const t = S.tower;
+  const regionRows = t.regions.map(g => '<tr><td><b>' + esc(g.region) + '</b></td><td class="right">' + g.stores + '</td><td>' + chip('BROKEN', g.broken + ' broken') + ' ' + chip('AT_RISK', g.at_risk + ' at risk') + ' ' + chip('SORTED', g.sorted + ' sorted') + '</td>' +
+    '<td class="right">' + g.planned_stores + ' / ' + g.stores + '</td><td class="right hide-m">' + n1(g.suggested_hours) + ' / ' + n1(g.planned_hours) + ' / ' + n1(g.actual_hours) + '</td><td class="right">' + rs(g.recovered_value) + '</td>' +
+    '<td class="right">' + rs(g.rupees_per_hour) + '</td><td class="right">' + (g.pending_change_pct === null ? '–' : (g.pending_change_pct > 0 ? '+' : '') + g.pending_change_pct + '%') + '</td><td class="right">' + (g.flags ? chip('NO_ACTUALS', g.flags) : '0') + '</td></tr>').join('');
+  return '<div class="card"><h1>Control tower</h1><p class="sub">Last 7 days. Hours = suggested / planned / actual. Pending change = absolute pending now vs 7 days ago.</p>' +
+    '<div class="scroll"><table><tr><th>Region</th><th class="right">Stores</th><th>State</th><th class="right">Planned</th><th class="right hide-m">Hours S / P / A</th><th class="right">Recovered</th><th class="right">₹ / h</th><th class="right">Pending Δ</th><th class="right">Flags</th></tr>' + regionRows + '</table></div></div>' +
+    '<div class="card"><h2>Pilot cohorts</h2><div class="scroll"><table><tr><th>Cohort</th><th class="right">Stores</th><th class="right">Actual hours</th><th class="right">Recovered</th><th class="right">Pending now</th><th class="right">7 days ago</th></tr>' +
+    t.cohorts.map(c => '<tr><td>' + chip(c.cohort) + '</td><td class="right">' + c.stores + '</td><td class="right">' + n1(c.actual_hours) + '</td><td class="right">' + rs(c.recovered_value) + '</td><td class="right">' + rs(c.pending) + '</td><td class="right">' + rs(c.pending_then) + '</td></tr>').join('') + '</table></div>' +
+    '<p class="sub">Broken stores should fall faster than their control pair. If control falls as fast, the recovery is not what moved it.</p></div>' +
+    '<div class="card"><h2>Stores</h2><div class="scroll"><table><tr><th>Store</th><th>State</th><th class="right">Pending</th><th class="right">₹ / h</th><th>Flag</th></tr>' +
+    t.rows.slice().sort((a, b) => a.region.localeCompare(b.region) || a.flag.sev - b.flag.sev).map(r => '<tr class="click" data-open="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.region + (r.cohort ? ' · ' + r.cohort : '')) + '</div></td><td>' + chip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + (r.capacity ? ' · capacity ' + esc(r.capacity.toLowerCase().replace('_', ' ')) : '') + '</div></td><td class="right">' + rs(r.pending) + '</td><td class="right">' + rs(r.window.rupees_per_hour) + '</td><td>' + chip(r.flag.code) + '</td></tr>').join('') + '</table></div></div>';
+}
+
+// ---------------------------------------------------------------- Settings (PM) — same values as the CFG tab in the sheet
+const GROUPS = [['Severity', /^sev_/], ['Broken rack / aisle', /^(rack_|aisle_|full_|direct_|signal_|locations_per)/], ['Crew & time', /(captain|budget|minutes|gross|upc_search|audit|suggest|complex)/],
+  ['Data sources', /^(source_|inputs_|tab_|recovery_app|export_)/], ['Access', /(emails|pilot_|restrict)/], ['Other', /./]];
+function settingsView() {
+  const q = S.settings, seen = {};
+  let h = '<div class="card"><h1>Settings</h1><p class="sub">These are the CFG tab in the IRD sheet. Leave a value blank to use the default. Every change is written to ACTION_LOG with your name.</p>' +
+    (q.errors.length ? '<div class="banner red">' + esc(q.errors.join('; ')) + '</div>' : '') + '</div>';
+  GROUPS.forEach(g => {
+    const rows = q.rows.filter(r => !seen[r.key] && g[1].test(r.key));
+    if (!rows.length) return;
+    rows.forEach(r => { seen[r.key] = true; });
+    h += '<div class="card"><h2>' + g[0] + '</h2>' + rows.map(r => '<div class="field"><label>' + esc(r.label) + ' <span class="sub mono">' + esc(r.key) + '</span></label>' +
+      '<input data-set="' + esc(r.key) + '" value="' + esc(r.value) + '" placeholder="default: ' + esc(r.default) + '"><span class="sub">In use: ' + esc(r.effective || '(blank)') + '</span></div>').join('') + '</div>';
+  });
+  h += '<div class="card"><button class="btn" data-act="saveset">Save changes</button></div>';
+  h += '<div class="card"><h2>Recent actions</h2><div class="scroll"><table><tr><th>When</th><th>Who</th><th>Action</th><th>Store / plan</th><th>Detail</th></tr>' +
+    q.log.map(r => '<tr><td>' + esc(r.at) + '</td><td>' + esc(r.by) + '</td><td>' + esc(r.action) + '</td><td>' + esc([r.outlet_id, r.plan_id].filter(Boolean).join(' · ')) + '</td><td>' + esc(String(r.detail).slice(0, 160)) + '</td></tr>').join('') + '</table></div></div>';
+  return h;
+}
+
+// ---------------------------------------------------------------- printing
+function printHtml(pages) {
+  const css = 'body{font:12px Arial,sans-serif;margin:0}.pg{page-break-after:always;padding:18px}.pg:last-child{page-break-after:auto}h1{font-size:18px;margin:0 0 4px}.meta{margin-bottom:10px}' +
+    'table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px;vertical-align:top;text-align:left}th{background:#0b5d44;color:#fff}.loc{font-family:monospace;font-weight:700;font-size:13px}.box{width:44px;text-align:center}' +
+    'ol{margin:4px 0 8px 18px;padding:0}.sign{margin-top:18px;display:flex;gap:40px}.sign div{border-top:1px solid #000;padding-top:4px;min-width:160px}';
+  const body = pages.map(pg => '<div class="pg"><h1>Recovery tasks · ' + esc(pg.captain) + '</h1><div class="meta">' + esc(pg.store) + ' · ' + esc(pg.date) + (pg.window ? ' · window ' + esc(pg.window) : '') + ' · <b>' + pg.hours + ' h</b> · ' + pg.locations + ' locations · ' + esc(pg.plan_id) + '</div>' +
+    '<table><tr><th>#</th><th>Task</th><th>Where</th><th>Look for (item)</th><th>Qty</th><th class="box">Done</th><th>Found / remarks</th></tr>' +
+    pg.rows.map(r => r.items.concat(r.more_items ? [{name: '+ ' + r.more_items + ' more: check every unit', qty: ''}] : []).map((it, j) => '<tr>' + (j ? '<td></td><td></td><td></td>' : '<td>' + r.no + '</td><td>' + esc(r.task) + (r.level === 'SEARCH' ? ': ' + esc(r.target) : '') + '<br>' + r.hours + ' h</td><td class="loc">' + esc(r.where) + '</td>') +
+      '<td>' + esc(it.name) + (it.upc ? ' <span class="loc">UPC ' + esc(it.upc) + '</span>' : '') + '</td><td>' + esc(it.qty) + '</td><td class="box">☐</td><td></td></tr>').join('')).join('') + '</table>' +
+    pg.how.map(x => '<p><b>How: ' + esc(x.label) + '</b></p><ol>' + x.steps.map(st => '<li>' + esc(st) + '</li>').join('') + '</ol>').join('') +
+    '<div class="sign"><div>Captain sign</div><div>SM sign</div><div>Time done</div></div></div>').join('');
+  const w = window.open('', '_blank');
+  if (!w) { toast('Allow pop-ups to print', true); return; }
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Recovery tasks</title><style>' + css + '</style></head><body>' + body + '</body></html>');
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+}
+
+// ---------------------------------------------------------------- actions
+function taskSheet(id) {
+  const t = S.d.diagnosis.tasks.find(x => x.task_id === id);
+  if (!t) return;
+  const m = document.createElement('div');
+  m.className = 'modal';
+  m.innerHTML = '<div class="sheet"><div class="row"><div class="grow">' + lv(t) + ' <b class="mono">' + esc(t.target) + '</b> ' + chip(t.best_priority) + '</div><button class="btn ghost sm" data-close="1">Close</button></div>' +
+    '<div class="sub" style="margin:6px 0">' + t.item_count + ' items · ' + rs(t.value) + ' · ' + (t.location_count ? t.location_count + ' locations · ' : '') + n1(t.est_hours) + ' h</div>' + taskDetail(t) + '</div>';
+  m.onclick = e => { if (e.target === m || e.target.dataset.close) m.remove(); };
+  document.body.appendChild(m);
+}
+function doConfirm(btn) {
+  btn.disabled = true; btn.textContent = 'Confirming…';
+  api('RE_CONFIRM', {outlet_id: S.outlet, feed_date: S.d.summary.feed_date, crew: myCrew(), skip: Object.keys(S.skip), window: $('win') ? $('win').value : '', token: token()})
+    .then(r => { setStore(r.view); S.cm = null; S.tower = null; S.planning = false; S.exportFile = null; render(); window.scrollTo(0, 0); toast(r.duplicate ? 'Already confirmed' : 'Plan ' + r.plan_id + ' confirmed'); })
+    .catch(e => { btn.disabled = false; btn.textContent = 'Confirm plan'; toast(em(e), true); });
+}
+function doActuals(btn) {
+  const tp = S.d.today_plan, rows = [];
+  document.querySelectorAll('[data-cap]').forEach((el, i) => {
+    const h = el.querySelector('[data-ah]').value, tasks = {};
+    el.querySelectorAll('[data-ts]').forEach(s => { if (s.value) tasks[s.dataset.tid] = s.value; });
+    if (h === '' && !Object.keys(tasks).length) return;
+    rows.push({captain: el.dataset.cap, actual_hours: h === '' ? 0 : Number(h), tasks, note: el.querySelector('[data-note]').value});
+  });
+  if (!rows.length) { toast('Enter hours for at least one captain.', true); return; }
+  btn.disabled = true;
+  api('RE_ACTUALS', {plan_id: tp.plan.plan_id, rows, token: token()}).then(d => { setStore(d); S.cm = null; S.tower = null; render(); toast('Actuals saved'); }).catch(e => { btn.disabled = false; toast(em(e), true); });
+}
+function wire() {
+  const q = (s, f) => document.querySelectorAll(s).forEach(f);
+  q('[data-task]', el => { el.onclick = () => taskSheet(el.dataset.task); });
+  q('[data-skip]', el => { el.onclick = () => { const id = el.dataset.skip; if (S.skip[id]) delete S.skip[id]; else S.skip[id] = true; S.planning = true; keep(render); }; });
+  q('[data-con]', el => { el.onchange = () => { S.crew[+el.dataset.con].on = el.checked; S.planning = true; keep(render); }; });
+  q('[data-chours]', el => { el.onchange = () => { S.crew[+el.dataset.chours].hours = Number(el.value); S.planning = true; keep(render); }; });
+  q('[data-cm]', el => { el.onclick = () => { S.cmOpen = el.dataset.cm; render(); const p = $('cmpanel'); if (p) p.scrollIntoView({behavior: 'smooth'}); }; });
+  q('[data-open]', el => { el.onclick = () => { S.outlet = el.dataset.open; $('store').value = S.outlet; S.view = 'today'; load(); }; });
+  if ($('win')) $('win').oninput = () => { S.win = $('win').value; };
+  if ($('extra')) $('extra').oninput = () => { S.extra = $('extra').value; };
+  q('[data-act]', b => {
+    const a = b.dataset.act;
+    b.onclick = () => {
+      if (a === 'showall') { S.showAll = true; render(); }
+      else if (a === 'showcrew') { S.showCrew = true; keep(render); }
+      else if (a === 'addcrew') {
+        const nm = (S.extra || '').trim();
+        if (!nm) return;
+        if (S.crew.some(c => c.name.toLowerCase() === nm.toLowerCase())) { toast(nm + ' is already listed', true); return; }
+        S.crew.push({name: nm, on: true, hours: S.d.settings.max_hours_per_captain}); S.extra = ''; S.planning = true; keep(render);
+      }
+      else if (a === 'confirm') doConfirm(b);
+      else if (a === 'printhere') { const tp = S.d.today_plan; printHtml(REC.printPages(tp.plan, tp.tasks, tp.lines, S.d.sops, S.d.store.outlet_name)); }
+      else if (a === 'export') {
+        b.disabled = true; b.textContent = 'Creating sheet…';
+        api('RE_EXPORT', S.d.today_plan.plan.plan_id).then(r => {
+          if (r.file && r.file.url) { S.exportFile = r.file; render(); toast('Printable sheet ready'); }
+          else { printHtml(r.pages); render(); }
+        }).catch(e => { b.disabled = false; b.textContent = 'Make printable sheet'; toast(em(e), true); });
+      }
+      else if (a === 'saveset') {
+        const ch = {};
+        document.querySelectorAll('[data-set]').forEach(el => { const r = S.settings.rows.find(x => x.key === el.dataset.set); if (r && el.value.trim() !== r.value) ch[r.key] = el.value.trim(); });
+        if (!Object.keys(ch).length) { toast('Nothing changed'); return; }
+        b.disabled = true;
+        api('RE_SETTINGS_SAVE', ch).then(q2 => { S.settings = q2; S.d = null; S.cm = null; S.tower = null; render(); toast('Saved ' + Object.keys(ch).length + ' setting(s)'); }).catch(e => { b.disabled = false; toast(em(e), true); });
+      }
+      else if (a === 'actuals') doActuals(b);
+      else if (a === 'cmsave') {
+        const r = S.cm.rows.find(x => x.outlet_id === S.cmOpen);
+        api('RE_CM_REVIEW', {outlet_id: r.outlet_id, plan_id: r.plan ? r.plan.plan_id : '', flag: r.flag.code, decision: $('cmdec').value, owner: $('cmown').value, next_review: $('cmdate').value, note: $('cmnote').value})
+          .then(q2 => { S.cm = q2; render(); toast('Decision recorded'); }).catch(e => toast(em(e), true));
+      }
+    };
+  });
+}
+/** Re-render without losing the scroll position (plan edits happen mid-page). */
+function keep(fn) { const y = window.scrollY; const open = Array.from(document.querySelectorAll('details')).map(d => d.open); fn(); document.querySelectorAll('details').forEach((d, i) => { if (open[i]) d.open = true; }); window.scrollTo(0, y); }
+if (document.readyState !== 'loading') start(); else document.addEventListener('DOMContentLoaded', start);
+})();
+</script>
+</body>
+</html>
