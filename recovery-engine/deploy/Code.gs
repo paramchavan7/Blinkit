@@ -1572,3 +1572,5 @@ function doGet(e) {
   return t.evaluate().setTitle('Recovery Engine').addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
+
+// ===== END OF Code.gs. If this line is the last line in Apps Script, the paste is complete. =====

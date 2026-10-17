@@ -1,6 +1,6 @@
 # Recovery Engine: setup from zero (no coding needed)
 
-You need **4 files**, sent to you with this guide:
+You need these files (all on the copy page, each with a Copy button):
 
 | File | What it is |
 |---|---|
@@ -8,6 +8,8 @@ You need **4 files**, sent to you with this guide:
 | `App.html` | The app screen. You paste it into Apps Script once. |
 | `RAWItemlevel_basic.sql` | Query 2. Its result goes into the **RAWItemlevel** tab. |
 | `STORE_VARIANCE_DAILY.sql` | Query 1. Its result goes into the **STORE_VARIANCE_DAILY** tab. |
+| `PILOT_COHORT` / `STORE_MASTER` tables | Ready to paste into the tabs with those names. No query needed. |
+| `LOCATION_RECOVERY_RAW_lite.sql` | Backup only, for when you can't fork Parth's location query. |
 
 Total time: about 25 minutes the first time.
 
@@ -41,7 +43,10 @@ Total time: about 25 minutes the first time.
     - **Sync (best):** point your query tool's Google Sheets sync at this sheet, tab **RAWItemlevel**, mode "replace". Then it refreshes by itself.
     - **By hand:** download the result as CSV. In the sheet, click the **RAWItemlevel** tab → **File → Import → Upload** → pick the CSV → Import location **"Replace current sheet"** → **Import data**.
 13. Do the same with **`STORE_VARIANCE_DAILY.sql`** → tab **STORE_VARIANCE_DAILY**.
-14. *(Optional, unlocks more features: see START_HERE for which feature each tab unlocks.)* Paste the exports you already have into the other blue tabs with the same names, e.g. EMPLOYEE_CAPACITY_SYNC_RAW, AUDIT_EXECUTION_RAW. Column order does not matter.
+14. *(Optional, unlocks more features: see START_HERE for which feature each tab unlocks.)* Column order does not matter in any tab.
+    - **PILOT_COHORT** and **STORE_MASTER**: no query needed. Copy the ready tables from the copy page, click cell **A1** of the tab, and paste. In STORE_MASTER, type `cm_sm` and `low_order_window` yourself.
+    - **STORE_HEALTH_RAW, EMPLOYEE_CAPACITY_SYNC_RAW, AUDIT_EXECUTION_RAW, LOCATION_RECOVERY_RAW**: ask Parth for the Redash links to his 4 queries with these names. Open each one, then **⋮ → Fork** to save your own copy (his edits no longer affect yours). Run it and send the result to the tab with the same name.
+    - If you can't get Parth's LOCATION_RECOVERY_RAW, run **`LOCATION_RECOVERY_RAW_lite.sql`** instead. It gives real rack sizes but no location PPI.
 15. Click **Recovery Engine → 2. Check data health**. The HEALTH tab opens. Both **required** rows must say **OK**.
 
 ## Part 5: People and settings (3 min)

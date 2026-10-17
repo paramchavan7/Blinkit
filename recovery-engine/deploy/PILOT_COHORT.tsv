@@ -1,0 +1,11 @@
+pair_id	region	outlet_id	outlet_name	cohort_role	comparison_outlet_id
+UPW_SS	UP West	7184	SS Gwalior Kampoo Road ES7	BROKEN	6406
+UPW_SS	UP West	6406	SS Gwalior Morar Road ES6	CONTROL	7184
+UK_SS	Uttarakhand	7877	SS Rishikesh Station Road ES4	BROKEN	6826
+UK_SS	Uttarakhand	6826	SS Dehradun Doon University ES21	CONTROL	7877
+TRICITY_SS	Tricity	4823	SS Kharar GBP Crest ES55	BROKEN	7476
+TRICITY_SS	Tricity	7476	SS Mohali Balongi ES134	CONTROL	4823
+ROP_SS	ROP & HP	3432	SS Jalandhar Bashirpura ES20	BROKEN	7204
+ROP_SS	ROP & HP	7204	SS Jalandhar Model Town ES120	CONTROL	3432
+JAMMU_SS	Jammu	8468	SS Jammu Bari Brahman ES19	BROKEN	8211
+JAMMU_SS	Jammu	8211	SS Jammu Katra ES16	CONTROL	8468
