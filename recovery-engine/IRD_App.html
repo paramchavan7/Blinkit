@@ -84,7 +84,7 @@ const TONE = {TOP25: 'c-red', TOP100: 'c-amb', RANKED: 'c-gry', REDUCED: 'c-grn'
   LOW_EXECUTION: 'c-red', NO_YIELD: 'c-amb', IN_PROGRESS: 'c-blu', ON_TRACK: 'c-grn', PILFERAGE: 'c-red', MISPLACED: 'c-amb', AUDIT_GAP: 'c-blu', OTHER: 'c-gry'};
 const chip = (s, l) => '<span class="chip ' + (TONE[s] || 'c-gry') + '">' + esc(l || String(s).replace(/_/g, ' ')) + '</span>';
 const lv = t => '<span class="chip lv lv-' + t.level + '">' + esc(t.label) + '</span>';
-const SRC = {PILFERAGE: 'Pilferage-prone', MISPLACED: 'Misplaced (went negative at pick)', AUDIT_GAP: 'Never audited', OTHER: 'Other'};
+const SRC = {PILFERAGE: 'Pilferage-prone', MISPLACED: 'Audit found it short (NEG location)', AUDIT_GAP: 'Never audited', OTHER: 'Other'};
 const LVC = {AISLE: 'var(--l-aisle)', RACK: 'var(--l-rack)', LOCATION: 'var(--l-loc)', SEARCH: 'var(--l-search)'};
 
 // ---------------------------------------------------------------- boot / load

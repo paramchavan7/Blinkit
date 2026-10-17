@@ -45,8 +45,13 @@ function RE_SERVICE_FACTORY(REC) {
     return m;
   }
   function healthOf(repo, id) {
-    const h = repo.health().find(x => text(x.outlet_id) === text(id)) || {};
-    return Object.assign({}, h, {cohort: text(h.cohort) || text(h.cohort_role)});
+    const h = repo.health().find(x => text(x.outlet_id) === text(id)) || {}, out = Object.assign({}, h, {cohort: text(h.cohort) || text(h.cohort_role)});
+    // Open / net variance come from the daily store table when the health row does not carry them.
+    if (!text(h.open_variance_3m) && repo.storeVariance) {
+      const v = REC.varianceHistory(repo.storeVariance(), id, repo.today(), REC.resolveSettings(repo.settingsRows()).settings);
+      if (v) Object.assign(out, v);
+    }
+    return out;
   }
   /** The employee export has one row per snapshot_date; keep the latest row per employee. */
   function latestRoster(rows) {

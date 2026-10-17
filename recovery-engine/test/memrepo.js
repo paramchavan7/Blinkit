@@ -16,7 +16,7 @@ function RE_MEMREPO(fx, opts) {
     users: () => opts.users || [],
     once: t => { if (tokens[t]) return false; tokens[t] = true; return true; },
     rows: tab => (tables[tab] || []).map(r => Object.assign({}, r)),
-    raw: () => fx.raw, storeMaster: () => fx.master, health: () => fx.health, storeMetrics: () => fx.metrics || [],
+    raw: () => fx.raw, storeMaster: () => fx.master, health: () => fx.health, storeMetrics: () => fx.metrics || [], storeVariance: () => fx.variance || [],
     exportSheet: (title, pages) => (opts.exportSheet ? opts.exportSheet(title, pages) : null), captains: () => fx.emps, locations: () => locs, audits: () => audits, sops: () => sops,
     append: (tab, objs) => { tables[tab] = (tables[tab] || []).concat(objs.map(o => { const r = {}; Object.keys(o).forEach(k => { r[k] = o[k] === null || o[k] === undefined ? '' : String(o[k]); }); return r; })); },
     getProp: k => props[k] || null, setProp: (k, v) => { props[k] = v; }, lock: fn => fn(),

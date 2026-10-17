@@ -26,6 +26,8 @@ var RE_INPUTS = {
     cols: ['outlet_id', 'region', 'cohort', 'cohort_role', 'comparison_outlet_id', 'open_variance_3m', 'net_variance_2m', 'low_order_window']},
   IN_STORE_METRICS: {cfgTab: 'tab_store_metrics', need: ['outlet_id'],
     cols: ['outlet_id', 'metric_date', 'data_period_status', 'ppi', 'tfr_pct', 'r2a_sec', 'surge_pct']},
+  IN_STORE_VARIANCE: {cfgTab: 'tab_store_variance', need: ['outlet_id'],
+    cols: ['date', 'date_', 'outlet_id', 'negative_amount', 'positive_amount', 'net_var']},
   IN_CAPTAINS: {cfgTab: 'tab_captains', need: ['outlet_id'],
     cols: ['snapshot_date', 'outlet_id', 'employee_id', 'employee_name', 'captain_id', 'captain_name', 'designation', 'active', 'auditor_active_hours_l7',
       'missing_complaint_pct_l7', 'wrong_item_complaint_pct_l7', 'recent_presence_status', 'complex_approved', 'iaph', 'qaph', 'bad_audit_pct', 'audits_30d']},
@@ -49,7 +51,7 @@ var RE_RAW_OPTIONAL = ['month_start_date', 'raw_synced_at', 'update_date', 'audi
 // DRAFT handheld SOP. Rahul's ground documentation replaces these rows in the SOP tab; the app reads the tab, not this list.
 var RE_DEFAULT_SOP = [
   ['LOCATION', 1, 'SM: on HHD create a Location Audit for each listed location and assign it to the captain.'],
-  ['LOCATION', 2, 'Captain: go to NEG locations first (where stock went negative), then the probable ones.'],
+  ['LOCATION', 2, 'Captain: go to NEG locations first (where an audit already found it short), then the probable ones.'],
   ['LOCATION', 3, 'Count every unit at the location, not only the listed item. Submit the audit on HHD.'],
   ['LOCATION', 4, 'Item found elsewhere? Put it away to its correct location and audit both locations.'],
   ['RACK', 1, 'SM: create Location Audits for every location in the rack and assign them to this captain only.'],
@@ -179,6 +181,7 @@ function re_repo() {
     rows: function (tab) { if (!memo['t_' + tab]) memo['t_' + tab] = re_rowsOf(re_ownTab(ss, tab, re_svc().H[tab])); return memo['t_' + tab]; },
     health: function () { return input('IN_STORE_HEALTH'); },
     storeMetrics: function () { return input('IN_STORE_METRICS'); },
+    storeVariance: function () { return input('IN_STORE_VARIANCE'); },
     exportSheet: function (title, pages, folderId) { return re_exportSheet(title, pages, folderId); },
     captains: function () { return input('IN_CAPTAINS'); },
     locations: function () { return input('IN_LOCATIONS'); },
@@ -341,6 +344,7 @@ function RE_HEALTH() {
   check('Variance (RAWItemlevel)', 'C: RAWItemlevel', repo.raw, 'raw_synced_at');
   check('Pilot cohort / store health', ext + (re_text(st.inputs_sheet_id) ? st.tab_health : 'IN_STORE_HEALTH'), repo.health, '');
   check('Store health (PPI / TFR / R2A / surge)', ext + (re_text(st.inputs_sheet_id) ? st.tab_store_metrics : 'IN_STORE_METRICS'), repo.storeMetrics, 'metric_date');
+  check('Store variance history (3 months)', ext + (re_text(st.inputs_sheet_id) ? st.tab_store_variance : 'IN_STORE_VARIANCE'), repo.storeVariance, 'date_');
   check('Captains', ext + (re_text(st.inputs_sheet_id) ? st.tab_captains : 'IN_CAPTAINS'), repo.captains, 'snapshot_date');
   check('Locations + PPI evidence', ext + (re_text(st.inputs_sheet_id) ? st.tab_locations : 'IN_LOCATIONS'), repo.locations, '');
   check('Audit sessions', ext + (re_text(st.inputs_sheet_id) ? st.tab_audits : 'IN_AUDITS'), repo.audits, 'audit_date_ist');

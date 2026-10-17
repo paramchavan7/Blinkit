@@ -29,4 +29,14 @@ assert.strictEqual(v.recovered_value, 866);
 assert.strictEqual(v.left_feed_value, 100);
 later.forEach(r => { r.month_start_date = '2026-11-01'; });
 assert.strictEqual(REC.verify(plan, items, later).items[0].status, 'NEW_MONTH');
+// severity history from query 1 rows (amounts, not net_var)
+const daily = [];
+for (let i = 1; i <= 100; i++) daily.push({date_: REC.addDays('2026-10-17', -i), outlet_id: '7076', negative_amount: 5000, positive_amount: 2000, net_var: 3000});
+const vh = REC.varianceHistory(daily, '7076', '2026-10-17', REC.DEFAULTS);
+console.log('variance history', vh);
+assert.strictEqual(vh.open_variance_3m, 450000);
+assert.strictEqual(vh.net_variance_2m, -180000);
+const sev = REC.severity(wl.summary, vh, REC.DEFAULTS, null);
+console.log('severity from history', sev.tier, sev.reasons.join('; '));
+assert.strictEqual(sev.inventory, 'BROKEN');
 console.log('LEAN FEED TESTS PASSED');

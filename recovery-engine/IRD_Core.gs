@@ -27,6 +27,7 @@ function RE_CORE_FACTORY() {
     {key:'tab_audits', def:'AUDIT_EXECUTION_RAW', type:'text', label:'Tab name for audit sessions in the inputs sheet'},
     {key:'tab_health', def:'PILOT_COHORT', type:'text', label:'Tab name for the pilot cohort in the inputs sheet'},
     {key:'tab_store_metrics', def:'STORE_HEALTH_RAW', type:'text', label:'Tab name for daily store health (PPI, TFR, R2A, surge) in the inputs sheet'},
+    {key:'tab_store_variance', def:'STORE_VARIANCE_DAILY', type:'text', label:'Tab name for daily store variance (query 1: negative_amount, positive_amount) in the inputs sheet'},
     {key:'export_folder_id', def:'', type:'text', label:'Drive folder for printable captain sheets (blank = My Drive)'},
     {key:'restrict_sm_to_users', def:'FALSE', type:'text', label:'TRUE = only people in the USERS tab can open the app, and SMs only see their outlets'},
     {key:'pm_emails', def:'param.chavan@grofers.com', type:'list', label:'PM / admin emails (control tower)'},
@@ -65,6 +66,8 @@ function RE_CORE_FACTORY() {
     {key:'sev_health_days', def:1, type:'num', label:'Completed days of store health averaged for severity (1 = latest day, as Parth)'},
     {key:'sev_broken_pending', def:150000, type:'num', label:'Severity (variance): absolute pending ₹ at which a store is BROKEN (half = AT RISK)'},
     {key:'sev_broken_open_3m', def:400000, type:'num', label:'Severity (variance): last-3-month open variance ₹ at which a store is BROKEN (half = AT RISK)'},
+    {key:'sev_open_days', def:90, type:'num', label:'Severity (variance): days summed for "open variance" (gross negative ₹)'},
+    {key:'sev_net_days', def:60, type:'num', label:'Severity (variance): days summed for "net variance" (positive ₹ minus negative ₹)'},
     {key:'sev_fresh_negatives', def:10, type:'num', label:'Severity (variance): T-1 negatives that add a severity point'},
     {key:'low_adherence_pct', def:70, type:'num', label:'Actual hours below this % of planned is flagged'},
     {key:'feed_stale_after_days', def:1, type:'num', label:'Feed older than this many days shows a warning'},
@@ -245,6 +248,22 @@ function RE_CORE_FACTORY() {
     const avg = k => { const v = mine.filter(r => has(r[k])).map(r => num(r[k])); return v.length ? round(v.reduce((x, y) => x + y, 0) / v.length, 2) : null; };
     return {date: day(mine[0].metric_date), days: mine.length, ppi: avg('ppi'), tfr_pct: avg('tfr_pct'), r2a_sec: avg('r2a_sec'), surge_pct: avg('surge_pct')};
   }
+  /**
+   * Open / net variance from the daily store table (query 1). Open = gross negative ₹ over sev_open_days.
+   * Net = positive ₹ minus negative ₹ over sev_net_days (below zero = net loss). Uses the amounts, not net_var, so its sign convention cannot flip the rule.
+   */
+  function varianceHistory(rows, outletId, today, st) {
+    const fromO = addDays(today, -st.sev_open_days), fromN = addDays(today, -st.sev_net_days);
+    let open = 0, net = 0, days = 0;
+    (rows || []).forEach(r => {
+      if (text(r.outlet_id) !== text(outletId)) return;
+      const d = day(r.date_ || r.date);
+      if (!d || d >= today) return;
+      if (d >= fromO) { open += Math.abs(num(r.negative_amount)); days++; }
+      if (d >= fromN) net += Math.abs(num(r.positive_amount)) - Math.abs(num(r.negative_amount));
+    });
+    return days ? {open_variance_3m: Math.round(open), net_variance_2m: Math.round(net), days} : null;
+  }
   const TIER_RANK = {SEVERELY_BROKEN: 3, BROKEN: 2, AT_RISK: 1, SORTED: 0};
   /**
    * Severity = the worse of two views:
@@ -398,7 +417,7 @@ function RE_CORE_FACTORY() {
       if (r.evidence) parts.push(r.evidence.direct + ' of ' + r.evidence.size + ' locations are direct targets (slow picks / repeated corrections)');
       return parts.join(' + ') + ': persistent instability. Sweep every location.';
     }
-    if (t.level === 'LOCATION') return t.item_count + ' item' + (t.item_count === 1 ? '' : 's') + ' at known locations. Check NEG locations first, then probable.';
+    if (t.level === 'LOCATION') return t.item_count + ' item' + (t.item_count === 1 ? '' : 's') + ' at known locations. Check NEG locations (audit found it short) first, then probable.';
     return 'No mapped location. Use the Recovery App probable locations to search.';
   }
 
@@ -765,7 +784,7 @@ function RE_CORE_FACTORY() {
 
   return {BUILD, SETTINGS, DEFAULTS, LEVEL, resolveSettings, role, access, isPilot, toMs, fmt, day, addDays, freshness, parseArrayCell, negativePriority,
     recoveryStatus, rackOf, aisleOf, worklist, severity, diagnose, rankCaptains, auditMetrics, withAuditMetrics, observed, allocate, suggest, latestActuals, verify, storeOutcome,
-    measure, flag, nudge, median, stableHash, storeMetrics, planDiff, printPages, TIER_RANK};
+    measure, flag, nudge, median, stableHash, storeMetrics, varianceHistory, planDiff, printPages, TIER_RANK};
 }
 var REC = RE_CORE_FACTORY();
 if (typeof module !== 'undefined' && module.exports) module.exports = REC;
