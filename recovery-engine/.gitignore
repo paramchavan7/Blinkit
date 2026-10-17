@@ -1,0 +1,3 @@
+# Derived from real store / employee exports: keep out of git.
+test/fixture.json
+preview/index.html
