@@ -21,6 +21,14 @@ function RE_CORE_FACTORY() {
     {key:'source_sheet_id', def:'1_JdCO5anThU-AqXTXiJ61jQyPBjT7FDi5mMzyiW1ktM', type:'text', label:'Variance source sheet (C) ID'},
     {key:'recovery_app_url', def:'', type:'text', label:'Recovery App (C) web app link'},
     {key:'pilot_outlets', def:'', type:'list', label:'Pilot outlet IDs (blank = all in feed)'},
+    {key:'inputs_sheet_id', def:'', type:'text', label:'Sheet that already syncs the input exports (e.g. Instore Recovery Engine V2). Blank = use the IN_ tabs in this sheet'},
+    {key:'tab_captains', def:'EMPLOYEE_CAPACITY_SYNC_RAW', type:'text', label:'Tab name for captains in the inputs sheet'},
+    {key:'tab_locations', def:'LOCATION_RECOVERY_RAW', type:'text', label:'Tab name for locations in the inputs sheet'},
+    {key:'tab_audits', def:'AUDIT_EXECUTION_RAW', type:'text', label:'Tab name for audit sessions in the inputs sheet'},
+    {key:'tab_health', def:'PILOT_COHORT', type:'text', label:'Tab name for the pilot cohort in the inputs sheet'},
+    {key:'tab_store_metrics', def:'STORE_HEALTH_RAW', type:'text', label:'Tab name for daily store health (PPI, TFR, R2A, surge) in the inputs sheet'},
+    {key:'export_folder_id', def:'', type:'text', label:'Drive folder for printable captain sheets (blank = My Drive)'},
+    {key:'restrict_sm_to_users', def:'FALSE', type:'text', label:'TRUE = only people in the USERS tab can open the app, and SMs only see their outlets'},
     {key:'pm_emails', def:'param.chavan@grofers.com', type:'list', label:'PM / admin emails (control tower)'},
     {key:'cm_emails', def:'', type:'list', label:'CM emails (cluster review)'},
     {key:'rank_limit', def:200, type:'num', label:'Rank limit (same as C)'},
@@ -31,8 +39,12 @@ function RE_CORE_FACTORY() {
     {key:'aisle_sweep_min_racks', def:3, type:'num', label:'Broken racks in one aisle before it needs an aisle reset (provisional)'},
     {key:'full_recon_min_aisles', def:3, type:'num', label:'Broken aisles before full inventory reconciliation is advised (provisional)'},
     {key:'locations_per_rack', def:17, type:'num', label:'Locations per rack when IN_LOCATIONS has no row for the rack'},
-    {key:'unstable_correction_days', def:2, type:'num', label:'Correction days (7d) that make a location persistently unstable (provisional)'},
-    {key:'rack_unstable_locations', def:3, type:'num', label:'Unstable locations in a rack before it needs a sweep even without variance items (provisional)'},
+    {key:'direct_ppi_delta_sec', def:2, type:'num', label:'Direct target: location PPI above ideal PPI by this many seconds (Parth V1 rule)'},
+    {key:'direct_correction_days', def:2, type:'num', label:'Direct target: stock-correction days in last 7 (Parth V1 rule)'},
+    {key:'signal_correction_days', def:1, type:'num', label:'Any signal: stock-correction days in last 7 (Parth V1 rule)'},
+    {key:'full_rack_direct_pct', def:25, type:'num', label:'Full rack sweep when direct targets are at least this % of the rack (Parth V1 rule)'},
+    {key:'full_rack_signal_pct', def:50, type:'num', label:'Full rack sweep when any-signal locations are at least this % of the rack (Parth V1 rule)'},
+    {key:'audit_min_coverage_pct', def:80, type:'num', label:'Audit counts as MATCHED only at or above this expected-SKU coverage % (V2 quality gate)'},
     {key:'minutes_per_location', def:4.7, type:'num', label:'Measured minutes per location (V2 engine)'},
     {key:'measured_to_gross', def:0.4, type:'num', label:'Measured-to-gross conversion (V2 engine)'},
     {key:'upc_search_minutes', def:10, type:'num', label:'Measured minutes per unmapped item search'},
@@ -44,8 +56,14 @@ function RE_CORE_FACTORY() {
     {key:'suggest_max_bad_pct', def:50, type:'num', label:'Captains above this bad-audit % are never suggested (SM can still add them)'},
     {key:'pilferage_l0', def:'cigarettes,tobacco,liquor,chocolates,personal care,fragrances', type:'list', label:'L0 categories treated as pilferage-prone'},
     {key:'high_value_mrp', def:500, type:'num', label:'MRP at or above which an item is pilferage-prone'},
-    {key:'sev_broken_pending', def:150000, type:'num', label:'Absolute pending ₹ at which a store is BROKEN (provisional)'},
-    {key:'sev_broken_open_3m', def:400000, type:'num', label:'Last-3-month open variance ₹ at which a store is BROKEN (provisional)'},
+    {key:'sev_ppi_target', def:18, type:'num', label:'Severity (Parth LiveHealth): store PPI above this = broken'},
+    {key:'sev_tfr_target', def:99.5, type:'num', label:'Severity (Parth LiveHealth): TFR % below this = broken. PPI and TFR both broken = SEVERELY BROKEN'},
+    {key:'sev_r2a_target', def:30, type:'num', label:'Capacity (Parth LiveHealth): R2A seconds above this = capacity risk'},
+    {key:'sev_surge_target', def:2, type:'num', label:'Capacity (Parth LiveHealth): surge % above this = capacity risk (both = CONSTRAINED)'},
+    {key:'sev_health_days', def:1, type:'num', label:'Completed days of store health averaged for severity (1 = latest day, as Parth)'},
+    {key:'sev_broken_pending', def:150000, type:'num', label:'Severity (variance): absolute pending ₹ at which a store is BROKEN (half = AT RISK)'},
+    {key:'sev_broken_open_3m', def:400000, type:'num', label:'Severity (variance): last-3-month open variance ₹ at which a store is BROKEN (half = AT RISK)'},
+    {key:'sev_fresh_negatives', def:10, type:'num', label:'Severity (variance): T-1 negatives that add a severity point'},
     {key:'low_adherence_pct', def:70, type:'num', label:'Actual hours below this % of planned is flagged'},
     {key:'feed_stale_after_days', def:1, type:'num', label:'Feed older than this many days shows a warning'},
     {key:'t3_offset', def:3, type:'num', label:'Outcome check 1 (days after plan)'},
@@ -77,11 +95,20 @@ function RE_CORE_FACTORY() {
     return {settings: out, errors};
   }
   const inList = (list, v) => !!text(v) && text(list).toLowerCase().split(',').map(x => x.trim()).indexOf(text(v).toLowerCase()) >= 0;
-  function role(st, email) {
-    if (inList(st.pm_emails, email)) return 'PM';
-    if (inList(st.cm_emails, email)) return 'CM';
-    return 'SM';
+  /** USERS tab (email, role, outlet_ids) wins; otherwise pm_emails / cm_emails; everyone else is an SM. */
+  function access(st, email, users) {
+    const u = (users || []).find(x => text(x.email).toLowerCase() === text(email).toLowerCase());
+    const strict = text(st.restrict_sm_to_users).toUpperCase() === 'TRUE';
+    if (u) {
+      const r = text(u.role).toUpperCase();
+      return {role: ['PM', 'CM', 'SM'].indexOf(r) >= 0 ? r : 'SM', outlets: text(u.outlet_ids) ? text(u.outlet_ids).split(/\s*[,;]\s*/).filter(Boolean) : null, listed: true};
+    }
+    if (inList(st.pm_emails, email)) return {role: 'PM', outlets: null, listed: true};
+    if (inList(st.cm_emails, email)) return {role: 'CM', outlets: null, listed: true};
+    if (strict) fail('You are not in the USERS list for this app. Ask the PM to add ' + email + '.');
+    return {role: 'SM', outlets: null, listed: false};
   }
+  const role = (st, email, users) => access(st, email, users).role;
   const isPilot = (st, id) => !text(st.pilot_outlets) || inList(st.pilot_outlets, id);
 
   // ---------------------------------------------------------------- time (IST)
@@ -195,23 +222,48 @@ function RE_CORE_FACTORY() {
     SEARCH: {label: 'Item search', complex: false}
   };
 
-  /** Store severity from 3-month history (IN_STORE_HEALTH, optional) and today's pending. */
-  function severity(summary, health, st) {
-    const h = health || {}, pending = summary.total_absolute_pending;
-    const open3 = has(h.open_variance_3m) ? num(h.open_variance_3m) : null;
-    const net2 = has(h.net_variance_2m) ? num(h.net_variance_2m) : null;
-    const reasons = [];
+  /** Latest (or averaged) completed-day store health from STORE_HEALTH_RAW rows of one outlet. */
+  function storeMetrics(rows, outletId, st) {
+    const mine = (rows || []).filter(r => text(r.outlet_id) === text(outletId) && has(r.ppi) && text(r.data_period_status).toUpperCase() !== 'PARTIAL')
+      .sort((a, b) => day(b.metric_date).localeCompare(day(a.metric_date))).slice(0, Math.max(1, st.sev_health_days));
+    if (!mine.length) return null;
+    const avg = k => { const v = mine.filter(r => has(r[k])).map(r => num(r[k])); return v.length ? round(v.reduce((x, y) => x + y, 0) / v.length, 2) : null; };
+    return {date: day(mine[0].metric_date), days: mine.length, ppi: avg('ppi'), tfr_pct: avg('tfr_pct'), r2a_sec: avg('r2a_sec'), surge_pct: avg('surge_pct')};
+  }
+  const TIER_RANK = {SEVERELY_BROKEN: 3, BROKEN: 2, AT_RISK: 1, SORTED: 0};
+  /**
+   * Severity = the worse of two views:
+   *  ops (Parth's LiveHealth rule): PPI > target and TFR < target = SEVERELY_BROKEN, one of them = BROKEN, else SORTED
+   *  inventory (variance): pending ₹, 3-month open variance, net loss over 2 months, fresh T-1 negatives
+   * Capacity (R2A, surge) is reported next to it because it changes how many hours a store can give.
+   */
+  function severity(summary, health, st, metrics) {
+    const h = health || {}, pending = summary.total_absolute_pending, reasons = [];
+    const open3 = has(h.open_variance_3m) ? num(h.open_variance_3m) : null, net2 = has(h.net_variance_2m) ? num(h.net_variance_2m) : null;
     let score = 0;
     if (pending >= st.sev_broken_pending) { score += 2; reasons.push('pending ₹ above broken line'); }
-    else if (pending >= st.sev_broken_pending / 2) { score += 1; reasons.push('pending ₹ rising'); }
+    else if (pending >= st.sev_broken_pending / 2) { score += 1; reasons.push('pending ₹ above half the broken line'); }
     if (open3 !== null) {
       if (open3 >= st.sev_broken_open_3m) { score += 2; reasons.push('3-month open variance high'); }
       else if (open3 >= st.sev_broken_open_3m / 2) { score += 1; reasons.push('3-month open variance elevated'); }
     }
     if (net2 !== null && net2 < 0 && open3 !== null && open3 >= st.sev_broken_open_3m / 2) { score += 1; reasons.push('net loss persisting over 2 months'); }
-    if (summary.priority_counts.P0 >= 10) { score += 1; reasons.push(summary.priority_counts.P0 + ' fresh (T-1) negatives'); }
-    const tier = score >= 3 ? 'BROKEN' : score >= 1 ? 'AT_RISK' : 'SORTED';
-    return {tier, score, reasons, pending, open_variance_3m: open3, net_variance_2m: net2};
+    if (summary.priority_counts.P0 >= st.sev_fresh_negatives) { score += 1; reasons.push(summary.priority_counts.P0 + ' fresh (T-1) negatives'); }
+    const inventory = score >= 3 ? 'BROKEN' : score >= 1 ? 'AT_RISK' : 'SORTED';
+    let ops = null, capacity = null;
+    const m = metrics || null;
+    if (m && m.ppi !== null && m.tfr_pct !== null) {
+      const pb = m.ppi > st.sev_ppi_target, tb = m.tfr_pct < st.sev_tfr_target;
+      ops = pb && tb ? 'SEVERELY_BROKEN' : pb || tb ? 'BROKEN' : 'SORTED';
+      if (pb) reasons.push('PPI ' + m.ppi + 's > ' + st.sev_ppi_target + 's');
+      if (tb) reasons.push('TFR ' + m.tfr_pct + '% < ' + st.sev_tfr_target + '%');
+    }
+    if (m && m.r2a_sec !== null && m.surge_pct !== null) {
+      const rb = m.r2a_sec > st.sev_r2a_target, sb = m.surge_pct > st.sev_surge_target;
+      capacity = rb && sb ? 'CONSTRAINED' : rb || sb ? 'AT_RISK' : 'HEALTHY';
+    }
+    const tier = ops && TIER_RANK[ops] > TIER_RANK[inventory] ? ops : inventory;
+    return {tier, inventory, ops, capacity, metrics: m, score, reasons, pending, open_variance_3m: open3, net_variance_2m: net2};
   }
 
   /**
@@ -225,13 +277,17 @@ function RE_CORE_FACTORY() {
     (locRows || []).forEach(l => {
       const loc = text(l.location_id);
       if (!loc) return;
-      const rk = text(l.rack_id) || rackOf(loc, st), m = master[rk] = master[rk] || {aisle: text(l.aisle_id) || aisleOf(loc, st), size: 0, unstable: 0, ppi_broken: 0};
+      const rk = text(l.rack_id) || rackOf(loc, st), m = master[rk] = master[rk] || {aisle: text(l.aisle_id) || aisleOf(loc, st), size: 0, direct: 0, signal: 0};
+      // Parth's V1 targeting: direct target = PPI > ideal + delta or repeated corrections; any signal = PPI > ideal or any correction.
+      const measurable = !text(l.current_ppi_signal_status) || text(l.current_ppi_signal_status).toUpperCase() === 'MEASURABLE';
+      const ppi = num(l.current_ppi), ideal = num(l.current_ideal_ppi), cd = num(l.correction_days_7d), hasPpi = measurable && has(l.current_ppi) && has(l.current_ideal_ppi);
       m.size++;
-      if (num(l.correction_days_7d) >= st.unstable_correction_days) m.unstable++;
-      if (num(l.current_ppi_broken_flag) === 1) m.ppi_broken++;
+      if ((hasPpi && ppi > ideal + st.direct_ppi_delta_sec) || cd >= st.direct_correction_days) m.direct++;
+      if ((hasPpi && ppi > ideal) || cd >= st.signal_correction_days) m.signal++;
     });
+    const fullRack = m => m.size > 0 && (100 * m.direct / m.size >= st.full_rack_direct_pct || 100 * m.signal / m.size >= st.full_rack_signal_pct);
     const rackRec = (rk, aisle) => racks[rk] = racks[rk] || {rack: rk, aisle: aisle, items: {}, locs: {}};
-    Object.keys(master).forEach(rk => { if (master[rk].unstable >= st.rack_unstable_locations) rackRec(rk, master[rk].aisle); });
+    Object.keys(master).forEach(rk => { if (fullRack(master[rk])) rackRec(rk, master[rk].aisle); });
     const locsOf = it => it.neg_locations.map(l => ({loc: l, type: 'NEG'}))
       .concat(it.prob_locations.filter(l => it.neg_locations.indexOf(l) < 0).slice(0, st.prob_locations_per_item).map(l => ({loc: l, type: 'PROB'})));
     wl.items.forEach(it => {
@@ -243,8 +299,8 @@ function RE_CORE_FACTORY() {
     });
     Object.keys(racks).forEach(k => {
       const r = racks[k];
-      r.unstable = master[k] ? master[k].unstable : 0;
-      r.broken = Object.keys(r.items).length >= st.rack_sweep_min_items || r.unstable >= st.rack_unstable_locations;
+      r.evidence = master[k] && fullRack(master[k]) ? master[k] : null;
+      r.broken = Object.keys(r.items).length >= st.rack_sweep_min_items || !!r.evidence;
       const a = aisles[r.aisle] = aisles[r.aisle] || {aisle: r.aisle, racks: [], broken: []};
       a.racks.push(k);
       if (r.broken) a.broken.push(k);
@@ -324,7 +380,7 @@ function RE_CORE_FACTORY() {
     if (t.level === 'RACK') {
       const r = racks[t.rack], n = Object.keys(r.items).length, parts = [];
       if (n) parts.push(n + ' variance item' + (n === 1 ? '' : 's'));
-      if (r.unstable) parts.push(r.unstable + ' locations with repeated stock corrections');
+      if (r.evidence) parts.push(r.evidence.direct + ' of ' + r.evidence.size + ' locations are direct targets (slow picks / repeated corrections)');
       return parts.join(' + ') + ': persistent instability. Sweep every location.';
     }
     if (t.level === 'LOCATION') return t.item_count + ' item' + (t.item_count === 1 ? '' : 's') + ' at known locations. Check NEG locations first, then probable.';
@@ -417,26 +473,37 @@ function RE_CORE_FACTORY() {
    * System-observed execution: audit sessions on the plan date at planned locations / racks.
    * This is what lets a CM check actual work without relying on the SM's own log.
    */
-  function observed(tasks, auditRows, plan) {
-    const d = text(plan.plan_date), locTask = {}, rackTask = {}, perTask = {}, byAuditor = {};
+  function observed(tasks, auditRows, plan, st) {
+    // Every audit session on the plan date is classified (V2/V3 rules):
+    //   BASELINE = finished before the plan was confirmed (routine counts never count as recovery)
+    //   MATCHED = planned location, coverage at or above the quality gate; QUALITY_GAP = planned but coverage below it
+    //   OFF_PLAN = after confirmation at a location the plan did not include
+    const d = text(plan.plan_date), conf = toMs(plan.confirmed_at), locTask = {}, rackTask = {}, perTask = {}, byAuditor = {}, counts = {MATCHED: 0, QUALITY_GAP: 0, OFF_PLAN: 0, BASELINE: 0};
     tasks.forEach(t => {
       perTask[t.task_id] = {audited: 0, planned: t.location_count};
       if (t.complex) rackTask[t.rack] = t.task_id;
       else (t.location_list || []).forEach(l => { locTask[l.location_id] = t.task_id; });
     });
-    const seen = {};
-    let sessions = 0;
+    const matched = {}, events = [];
     auditRows.forEach(a => {
       if (text(a.outlet_id) !== text(plan.outlet_id) || day(a.audit_date_ist) !== d) return;
-      const loc = text(a.location_id), tid = locTask[loc] || rackTask[text(a.rack_id)];
-      if (!tid) return;
-      sessions++;
+      const loc = text(a.location_id), tid = locTask[loc] || rackTask[text(a.rack_id) || rackOf(loc, st)], end = toMs(a.end_time);
+      const cov = has(a.expected_sku_coverage_pct) ? num(a.expected_sku_coverage_pct) : null, q = text(a.quality_status).toUpperCase();
+      let cls;
+      if (conf !== null && end !== null && end <= conf) cls = 'BASELINE';
+      else if (!tid) cls = 'OFF_PLAN';
+      else if (cov !== null ? cov < st.audit_min_coverage_pct : q.indexOf('BELOW') === 0) cls = 'QUALITY_GAP';
+      else cls = 'MATCHED';
+      counts[cls]++;
       const id = text(a.auditor_id);
-      byAuditor[id] = round((byAuditor[id] || 0) + num(a.session_elapsed_seconds) / 3600, 2);
-      if (!seen[loc]) { seen[loc] = true; perTask[tid].audited++; }
+      if (cls !== 'BASELINE') byAuditor[id] = round((byAuditor[id] || 0) + num(a.session_elapsed_seconds) / 3600, 2);
+      if (cls === 'MATCHED' && !matched[loc]) { matched[loc] = true; perTask[tid].audited++; }
+      if (events.length < 300) events.push({location_id: loc, task_id: tid || '', auditor_id: id, end_time: text(a.end_time), coverage_pct: cov, class: cls});
     });
-    const planned = tasks.reduce((v, t) => v + t.location_count, 0), audited = Object.keys(seen).length;
-    return {sessions, locations_audited: audited, locations_planned: planned, pct: planned ? Math.round(100 * Math.min(audited, planned) / planned) : null, per_task: perTask, hours_by_auditor: byAuditor,
+    const planned = tasks.reduce((v, t) => v + t.location_count, 0), audited = Object.keys(matched).length;
+    events.sort((a, b) => text(b.end_time).localeCompare(text(a.end_time)));
+    return {sessions: counts.MATCHED + counts.QUALITY_GAP + counts.OFF_PLAN, counts, events, locations_audited: audited, locations_planned: planned,
+      pct: planned ? Math.round(100 * Math.min(audited, planned) / planned) : null, per_task: perTask, hours_by_auditor: byAuditor,
       hours: round(Object.keys(byAuditor).reduce((v, k) => v + byAuditor[k], 0), 2)};
   }
 
@@ -599,8 +666,8 @@ function RE_CORE_FACTORY() {
       recovery: v,
       rupees_per_hour: actualHours > 0 ? Math.round(v.recovered_value / actualHours) : null,
       outcome: storeOutcome(plan, snaps, st, today),
-      observed: auditRows && auditRows.length ? observed(P.filter(l => text(l.detail_json)).map(l => JSON.parse(l.detail_json)), auditRows, plan) : null,
-      deviation_reason: text(plan.deviation_reason)
+      observed: auditRows && auditRows.length ? observed(P.filter(l => text(l.detail_json)).map(l => JSON.parse(l.detail_json)), auditRows, plan, st) : null,
+      changes: text(plan.changes_vs_suggested)
     };
   }
 
@@ -633,28 +700,52 @@ function RE_CORE_FACTORY() {
     return ('00000000' + h.toString(16)).slice(-8);
   }
 
-  /** WhatsApp-ready brief for one captain. */
-  function captainBrief(name, plan, tasks, sops, storeName, window) {
-    const byId = {};
-    tasks.forEach(t => { byId[t.task_id] = t; });
-    const mine = plan.lines.filter(l => l.captain === name);
-    const h = round(mine.reduce((v, l) => v + l.hours, 0), 2);
-    const out = ['*Recovery: ' + name + '* | ' + storeName, h + ' h' + (window ? ' | ' + window : ''), ''];
-    mine.forEach((l, i) => {
-      const t = byId[l.task_id];
-      if (!t) return;
-      out.push((i + 1) + ') ' + t.label + ' ' + (t.level === 'SEARCH' ? '' : t.target) + (l.share < 0.99 ? ' (part: ~' + Math.round(l.share * 100) + '%)' : '') + ' | ' + l.hours + ' h');
-      if (t.level === 'LOCATION') t.location_list.forEach(x => out.push('   ' + x.location_id + (x.type === 'NEG' ? ' (NEG, check first)' : '')));
-      t.items.slice(0, t.complex ? 10 : 15).forEach(x => out.push('   - ' + x.item_name + ' | qty ' + x.variance_qty + (t.level === 'SEARCH' && x.upc ? ' | UPC ' + x.upc : '')));
-      const steps = (sops[t.level] || []).map((s, j) => '     ' + (j + 1) + '. ' + s);
-      if (steps.length) { out.push('   How:'); steps.forEach(s => out.push(s)); }
-    });
-    return out.join('\n');
+  /** What the SM changed versus the suggestion. Recorded automatically; the SM is never asked to justify it. */
+  function planDiff(sugg, mine) {
+    const hrs = p => { const o = {}; p.crew.forEach(c => { o[c.name] = c.hours; }); return o; };
+    const a = hrs(sugg), b = hrs(mine), out = [];
+    Object.keys(b).forEach(n => { if (a[n] === undefined) out.push('+' + n); else if (a[n] !== b[n]) out.push(n + ' ' + a[n] + '→' + b[n] + 'h'); });
+    Object.keys(a).forEach(n => { if (b[n] === undefined) out.push('−' + n); });
+    const ta = {}, tb = {};
+    sugg.lines.forEach(l => { ta[l.task_id] = true; });
+    mine.lines.forEach(l => { tb[l.task_id] = true; });
+    const dropped = Object.keys(ta).filter(k => !tb[k]).length, added = Object.keys(tb).filter(k => !ta[k]).length;
+    if (dropped) out.push(dropped + ' suggested task' + (dropped === 1 ? '' : 's') + ' not planned');
+    if (added) out.push(added + ' extra task' + (added === 1 ? '' : 's'));
+    return out.join(', ');
   }
 
-  return {BUILD, SETTINGS, DEFAULTS, LEVEL, resolveSettings, role, isPilot, toMs, fmt, day, addDays, freshness, parseArrayCell, negativePriority,
+  /**
+   * Print model: one page per captain, only what is needed to execute. Rendered as a Google Sheet (one tab per captain)
+   * on the server and as printable HTML in the browser.
+   */
+  function printPages(plan, tasks, lines, sops, storeName) {
+    const byId = {};
+    tasks.forEach(t => { byId[t.task_id] = t; });
+    const caps = [];
+    lines.forEach(l => { if (caps.indexOf(l.captain) < 0) caps.push(l.captain); });
+    return caps.map(c => {
+      const mine = lines.filter(l => l.captain === c);
+      const rows = [];
+      mine.forEach((l, i) => {
+        const t = byId[l.task_id];
+        if (!t) return;
+        const where = t.level === 'LOCATION' ? t.location_list.map(x => x.location_id + (x.type === 'NEG' ? ' (first)' : '')).join(', ')
+          : t.level === 'SEARCH' ? 'Search (see Recovery App)' : 'Whole rack ' + t.rack + (l.share < 0.99 ? ' (about ' + Math.round(l.share * 100) + '%, split with a colleague)' : '');
+        const items = t.items.slice(0, t.complex ? 10 : 15);
+        rows.push({no: i + 1, task: t.label, target: t.level === 'SEARCH' ? t.target : t.target, where, hours: round(l.hours, 2), items: items.map(x => ({name: x.item_name, qty: x.variance_qty, upc: t.level === 'SEARCH' ? x.upc : ''})),
+          more_items: Math.max(0, t.items.length - items.length), level: t.level});
+      });
+      const levels = rows.map(r => r.level).filter((v, i, a) => a.indexOf(v) === i);
+      return {captain: c, store: storeName, date: text(plan.plan_date), window: text(plan.window), plan_id: text(plan.plan_id), hours: round(mine.reduce((v, l) => v + l.hours, 0), 2),
+        locations: Math.round(mine.reduce((v, l) => v + (byId[l.task_id] ? byId[l.task_id].location_count * Math.min(1, l.share) : 0), 0)),
+        rows, how: levels.map(lv => ({level: lv, label: LEVEL[lv].label, steps: sops[lv] || []}))};
+    });
+  }
+
+  return {BUILD, SETTINGS, DEFAULTS, LEVEL, resolveSettings, role, access, isPilot, toMs, fmt, day, addDays, freshness, parseArrayCell, negativePriority,
     recoveryStatus, rackOf, aisleOf, worklist, severity, diagnose, rankCaptains, auditMetrics, withAuditMetrics, observed, allocate, suggest, latestActuals, verify, storeOutcome,
-    measure, flag, nudge, median, stableHash, captainBrief};
+    measure, flag, nudge, median, stableHash, storeMetrics, planDiff, printPages, TIER_RANK};
 }
 var REC = RE_CORE_FACTORY();
 if (typeof module !== 'undefined' && module.exports) module.exports = REC;

@@ -10,43 +10,29 @@ The CM can see whether those man-hours worked. Suggested, planned and actual are
 
 | Step | What the user sees | Logic (Core.gs) |
 |---|---|---|
-| Diagnose | Severity (BROKEN / AT_RISK / SORTED) with reasons, the recommended recovery level, a stacked bar of variance by level, and where the variance comes from | `severity`, `diagnose`: an item goes to the coarsest broken unit holding one of its locations. A broken rack has ≥4 variance items **or** ≥3 locations with repeated stock corrections (from LOCATION_RECOVERY_RAW). A broken aisle has ≥3 broken racks. ≥3 broken aisles → advise full reconciliation |
+| Diagnose | Severity (SEVERELY_BROKEN / BROKEN / AT_RISK / SORTED) = the worse of Parth's LiveHealth rule (PPI > 18 s, TFR < 99.5%) and the variance rule, plus capacity (R2A > 30 s, surge > 2%). All thresholds are in Settings. Also shows the recommended recovery level, a stacked bar of variance by level, and where the variance comes from | `severity`, `diagnose`: an item goes to the coarsest broken unit holding one of its locations. A broken rack has ≥4 variance items **or** passes Parth's V1 full-rack rule (direct targets ≥25% of the rack, or any-signal ≥50%; direct = PPI > ideal + 2 s or ≥2 correction days). A broken aisle has ≥3 broken racks. ≥3 broken aisles → advise full reconciliation |
 | Prescribe | Ordered task list (Aisle reset / Rack sweep / Location check / Item search), each with the reason, item watch-list, locations and hours | Rack sweeps are sized from the real location count of the rack. Time = 4.7 measured min per location ÷ 0.4 (your V2 constants, e.g. 3 h ≈ 15 locations) |
 | Suggest crew | Best captains present at T-1, **already ticked**, with hours | `auditMetrics` from AUDIT_EXECUTION_RAW: IAPH, QAPH, bad-audit % (BELOW_PROVISIONAL_SOP). Score = speed × accuracy. Sweeps go only to the more accurate half. Captains with >50% bad audits are never suggested |
-| SM plans | Untick, change hours, add a name, skip a task. Suggested vs your plan updates live. A reason is required only when the SM changes the suggestion | Same `allocate` runs in the browser and on the server. The suggestion is stored next to the plan, never imposed |
-| Execute | One card per captain, with a **Copy WhatsApp brief** button (tasks, locations, items, HHD steps) | Steps come from the `SOP` tab (draft, for Rahul to replace) |
+| SM plans | Untick, change hours, add a name, skip a task. Suggested vs your plan updates live. **The SM is never asked why.** What changed is recorded automatically (`changes_vs_suggested`) | Same `allocate` runs in the browser and on the server. The suggestion is stored next to the plan, never imposed |
+| Execute | **Printable sheet: one A4 page per captain** (tasks, locations in bold mono, items + qty, tick boxes, found-qty column, HHD steps, signatures), as a Google Sheet + PDF, or "Print here" | `printPages` model; steps come from the `SOP` tab |
 | Close shift | Actual hours and done/partial/not-done per task, per captain | Append-only `ACTUALS` |
 | Measure | Suggested / Planned / Actual triad, crew overlap, **planned locations audited (from audit data, not the SM's word)**, items recovered (feed), ₹ per man-hour, T+3/T+7 store variance, nudge vs region | `measure`, `observed`, `verify` |
 | CM | Stores sorted by flag: NO_ACTUALS, LOW_EXECUTION, LOW_ADHERENCE, RELAPSED, NO_YIELD, NO_PLAN. Decision + owner logged | `flag` |
 | PM | Region roll-up (hours S/P/A, ₹ recovered, ₹/h, pending Δ 7d), BROKEN vs CONTROL cohort, store list | `tower` in Service.gs |
 
-## Files
-- `Core.gs`: pure logic (also sent to the browser so plan edits are instant)
-- `Service.gs`: orchestration over a repo interface (same code in Apps Script, tests and preview)
-- `Server.gs`: Google Sheets repo + web app entry points
-- `App.html`: the UI
+**Install: see [SETUP_GUIDE.md](SETUP_GUIDE.md)** (click by click, into the existing IRD V0.6 project).
+
+## Files (names match the IRD V0.6 Apps Script project)
+- `IRD_Core.gs`: pure logic (also sent to the browser so plan edits are instant)
+- `IRD_Service.gs`: orchestration over a repo interface (same code in Apps Script, tests and preview); every write goes to ACTION_LOG
+- `Code.gs`: Google Sheets backend, sheet menu, health check, printable sheet export, web app entry points
+- `IRD_App.html`: the UI (SM Today, Store results, CM Cluster review, PM Control tower, PM Settings & log)
 - `test/`: `node test/fixture.js <exports dir>` then `node test/run.js` (end-to-end on real exports)
 - `preview/build.js`: `node preview/build.js` → `preview/index.html` opens in any browser with no deploy
 
-## Install (about 15 min)
-1. New Google Sheet "Recovery Engine". Go to Extensions → Apps Script and add the files `Core`, `Service`, `Server` (script) and `App` (HTML).
-2. Run `RE_SETUP` once. It creates the tabs and seeds `CFG` and `SOP`. Then run `RE_INSTALL_TRIGGER` (daily 10:00 snapshot).
-3. Paste your exports into the input tabs. Paste them as they are: only the columns below are required, and extra columns are ignored.
-
-| Tab | Paste | Required columns |
-|---|---|---|
-| `IN_STORE_HEALTH` | PILOT_COHORT (+ optional open_variance_3m, net_variance_2m, low_order_window) | outlet_id |
-| `IN_CAPTAINS` | EMPLOYEE_CAPACITY_SYNC_RAW (+ optional `complex_approved` Y/N) | outlet_id, employee_name |
-| `IN_LOCATIONS` | LOCATION_RECOVERY_RAW | outlet_id, location_id |
-| `IN_AUDITS` | AUDIT_EXECUTION_RAW (last 30 days is enough) | audit_date_ist, outlet_id, auditor_id, session_elapsed_seconds |
-
-   Variance stays in C: RAWItemlevel and Store_Master are read-only from `source_sheet_id`.
-4. In `CFG`, set `pilot_outlets` (the 10 IDs), `cm_emails`, `pm_emails` and `recovery_app_url`.
-5. Deploy → Web app, Execute as **Me**, access **anyone in the org**. Open `/exec?store=<outlet_id>`.
-
 ## Provisional (needs your data, not more code)
-- Severity thresholds `sev_broken_pending` / `sev_broken_open_3m`: placeholders until you supply the 3-month open and 2-month net variance query.
-- Broken rack / aisle thresholds (4 items, 3 unstable locations, 3 racks).
+- Variance severity thresholds `sev_broken_pending` / `sev_broken_open_3m`: placeholders until you supply the 3-month open and 2-month net variance query (Parth's PPI/TFR rule is live).
+- Broken rack by variance items (4) and broken aisle (3 broken racks) are my thresholds; Parth had no aisle rule. All are settings.
 - Variance-source buckets (pilferage-prone / misplaced / never audited): rule-based placeholders until Rahul's documented cases replace them.
 - SOP steps: a draft written without seeing the HHD. Replace the rows in the `SOP` tab.
 

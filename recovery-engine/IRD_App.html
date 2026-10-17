@@ -30,9 +30,10 @@ h1{font-size:18px;margin:0}h2{font-size:15px;margin:0 0 8px}h3{font-size:11px;ma
 .stack{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--grybg);margin:8px 0 4px}.stack i{display:block;height:100%}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mute)}.legend span:before{content:"";display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;background:var(--c)}
 .hero{border-left:4px solid var(--brand);background:var(--brand2);border-radius:8px;padding:10px 12px;margin-top:10px}.hero b{font-size:15px}
-.btn{border:0;border-radius:9px;padding:10px 14px;background:var(--brand);color:#fff;font-weight:700;cursor:pointer}.btn.ghost{background:var(--brand2);color:var(--brand)}.btn.sm{padding:5px 9px;font-size:12px}.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn{border:0;border-radius:9px;padding:10px 14px;min-height:44px;background:var(--brand);color:#fff;font-weight:700;cursor:pointer}.btn.ghost{background:var(--brand2);color:var(--brand)}.btn.sm{padding:6px 10px;font-size:12px;min-height:34px}.btn:disabled{opacity:.45;cursor:not-allowed}
 .list>div{display:flex;gap:10px;align-items:center;padding:9px 2px;border-top:1px solid var(--line)}.click{cursor:pointer}.click:hover{background:#f8fbf9}
 .crew{display:grid;grid-template-columns:24px 1fr 84px;gap:8px;align-items:center;padding:8px 2px;border-top:1px solid var(--line)}.crew.off{opacity:.55}
+.crew select{min-height:40px}.crew input[type=checkbox]{width:22px;height:22px}.loc{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;font-size:14px}
 .crew select,.field input,.field select,.field textarea,.inline input,.inline select{padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;width:100%}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}.field label{font-size:12px;font-weight:600}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -61,7 +62,8 @@ var REC = RE_CORE_FACTORY();
 (function () {
 'use strict';
 const INITIAL = '<?= initialStore ?>';
-const S = {boot: null, d: null, outlet: '', view: 'today', crew: [], skip: {}, showAll: false, cm: null, cmOpen: '', tower: null, extra: ''};
+const S = {boot: null, d: null, outlet: '', view: 'today', crew: [], skip: {}, showAll: false, cm: null, cmOpen: '', tower: null, extra: '', settings: null, exportFile: null};
+const token = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 const $ = id => document.getElementById(id);
 const esc = x => String(x === null || x === undefined ? '' : x).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const rs = x => (x === null || x === undefined || isNaN(Number(x))) ? '–' : '₹' + Math.round(Number(x)).toLocaleString('en-IN');
@@ -76,7 +78,7 @@ function api(fn, arg) {
   });
 }
 function toast(m, err) { const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), err ? 6000 : 2500); }
-const TONE = {BROKEN: 'c-red', AT_RISK: 'c-amb', SORTED: 'c-grn', CONTROL: 'c-blu', P0: 'c-red', P1: 'c-red', P2: 'c-amb', P3: 'c-amb', P4: 'c-gry', EV: 'c-blu',
+const TONE = {SEVERELY_BROKEN: 'c-red', CONSTRAINED: 'c-red', HEALTHY: 'c-grn', MATCHED: 'c-grn', QUALITY_GAP: 'c-amb', OFF_PLAN: 'c-gry', BASELINE: 'c-blu', BROKEN: 'c-red', AT_RISK: 'c-amb', SORTED: 'c-grn', CONTROL: 'c-blu', P0: 'c-red', P1: 'c-red', P2: 'c-amb', P3: 'c-amb', P4: 'c-gry', EV: 'c-blu',
   A: 'c-grn', B: 'c-blu', C: 'c-gry', NEW: 'c-gry', PROXY: 'c-gry', FOUND: 'c-grn', CLEARED: 'c-grn', OPEN: 'c-amb', NOT_IN_FEED: 'c-gry', BETTER: 'c-grn', SUSTAINED: 'c-grn',
   WORSE: 'c-red', RELAPSED: 'c-red', FLAT: 'c-gry', PENDING: 'c-gry', NO_DATA: 'c-gry', NO_BASELINE: 'c-gry', NO_PLAN: 'c-amb', NO_ACTUALS: 'c-red', LOW_ADHERENCE: 'c-red',
   LOW_EXECUTION: 'c-red', NO_YIELD: 'c-amb', IN_PROGRESS: 'c-blu', ON_TRACK: 'c-grn', PILFERAGE: 'c-red', MISPLACED: 'c-amb', AUDIT_GAP: 'c-blu', OTHER: 'c-gry'};
@@ -94,7 +96,7 @@ function start() {
     const init = INITIAL && INITIAL.indexOf('<?') < 0 ? INITIAL : '';
     S.outlet = b.stores.some(s => s.outlet_id === init) ? init : (b.stores[0] || {}).outlet_id;
     sel.value = S.outlet;
-    sel.onchange = () => { S.outlet = sel.value; S.view = S.view === 'cm' || S.view === 'tower' ? 'today' : S.view; load(); };
+    sel.onchange = () => { S.outlet = sel.value; S.exportFile = null; S.view = ['cm', 'tower', 'settings'].indexOf(S.view) >= 0 ? 'today' : S.view; load(); };
     $('who').textContent = b.me + ' · ' + b.role;
     if (!b.stores.length) { $('main').innerHTML = '<div class="card">No stores found. Check pilot_outlets in CFG.</div>'; return; }
     if (b.role === 'PM' && !init) S.view = 'tower'; else if (b.role === 'CM' && !init) S.view = 'cm';
@@ -112,7 +114,7 @@ function setStore(d) {
 function tabs() {
   const r = S.boot.role, t = [['today', 'Today'], ['history', 'Store results']];
   if (r !== 'SM') t.push(['cm', 'Cluster review']);
-  if (r === 'PM') t.push(['tower', 'Control tower']);
+  if (r === 'PM') t.push(['tower', 'Control tower'], ['settings', 'Settings & log']);
   $('tabs').innerHTML = t.map(x => '<button class="tab' + (S.view === x[0] ? ' on' : '') + '" data-v="' + x[0] + '">' + x[1] + '</button>').join('');
   document.querySelectorAll('.tab').forEach(b => { b.onclick = () => { S.view = b.dataset.v; if ((S.view === 'today' || S.view === 'history') && !S.d) load(); else render(); }; });
 }
@@ -121,8 +123,9 @@ function render() {
   const v = S.view;
   if (v === 'cm' && !S.cm) { $('main').innerHTML = '<div class="card">Loading cluster…</div>'; api('RE_CM').then(q => { S.cm = q; render(); }).catch(e => toast(em(e), true)); return; }
   if (v === 'tower' && !S.tower) { $('main').innerHTML = '<div class="card">Loading control tower…</div>'; api('RE_TOWER').then(q => { S.tower = q; render(); }).catch(e => toast(em(e), true)); return; }
+  if (v === 'settings' && !S.settings) { $('main').innerHTML = '<div class="card">Loading settings…</div>'; api('RE_SETTINGS').then(q => { S.settings = q; render(); }).catch(e => toast(em(e), true)); return; }
   if ((v === 'today' || v === 'history') && !S.d) { $('main').innerHTML = '<div class="card">Store could not be loaded.</div>'; return; }
-  $('main').innerHTML = v === 'today' ? today() : v === 'history' ? history() : v === 'cm' ? cluster() : tower();
+  $('main').innerHTML = v === 'today' ? today() : v === 'history' ? history() : v === 'cm' ? cluster() : v === 'settings' ? settingsView() : tower();
   wire();
 }
 
@@ -132,11 +135,11 @@ function plans() {
   const d = S.d;
   return {sugg: REC.allocate(d.diagnosis.tasks, d.suggestion.crew, d.roster, []), mine: REC.allocate(d.diagnosis.tasks, myCrew(), d.roster, Object.keys(S.skip))};
 }
-const deviates = p => JSON.stringify(p.sugg.lines) !== JSON.stringify(p.mine.lines);
+const changes = p => REC.planDiff(p.sugg, p.mine);
 
 // ---------------------------------------------------------------- Today
 function stepStrip(stage) {
-  const st = [['Diagnose', 'what is broken'], ['Plan', 'crew + hours'], ['Execute', 'captain briefs'], ['Close & measure', 'actual vs plan']];
+  const st = [['Diagnose', 'what is broken'], ['Plan', 'crew + hours'], ['Execute', 'print captain sheets'], ['Close & measure', 'actual vs plan']];
   return '<div class="steps">' + st.map((x, i) => '<div class="step' + (i === stage ? ' on' : i < stage ? ' done' : '') + '"><b>' + (i + 1) + '. ' + x[0] + '</b>' + x[1] + '</div>').join('') + '</div>';
 }
 function today() {
@@ -158,9 +161,10 @@ function diagnoseCard() {
   const modeText = {AISLE: 'Aisle reset: variance is spread across whole aisles, so item-by-item search will not hold.',
     RACK: 'Rack sweep: variance clusters in a few racks. Sweep those racks fully instead of chasing items.',
     LOCATION: 'Targeted item recovery: variance is scattered. Check the exact NEG / probable locations.'}[g.mode];
-  let h = '<div class="card"><div class="row"><div class="grow"><h1>' + esc(s.outlet_name) + '</h1><div class="sub">' + esc([s.outlet_id, s.region, s.cm_sm, 'feed ' + d.summary.feed_date].filter(Boolean).join(' · ')) + '</div></div>' +
-    (s.cohort ? chip(s.cohort, 'Pilot: ' + s.cohort) + ' ' : '') + chip(sev.tier) + '</div>' +
+  let h = '<div class="card"><h1>' + esc(s.outlet_name) + '</h1><div class="sub">' + esc([s.outlet_id, s.region, s.cm_sm, 'feed ' + d.summary.feed_date].filter(Boolean).join(' · ')) + '</div><div class="row" style="margin-top:6px">' +
+    (s.cohort ? chip(s.cohort, 'Pilot: ' + s.cohort) + ' ' : '') + chip(sev.tier) + (sev.capacity ? ' ' + chip(sev.capacity === 'HEALTHY' ? 'HEALTHY' : sev.capacity === 'CONSTRAINED' ? 'CONSTRAINED' : 'AT_RISK', 'capacity ' + sev.capacity.replace('_', ' ').toLowerCase()) : '') + '</div>' +
     (sev.reasons.length ? '<div class="sub" style="margin-top:4px">Why ' + esc(sev.tier.replace('_', ' ').toLowerCase()) + ': ' + esc(sev.reasons.join(' · ')) + '</div>' : '') +
+    (sev.metrics ? '<div class="sub">Store health ' + esc(sev.metrics.date) + ': PPI ' + n1(sev.metrics.ppi) + 's · TFR ' + n1(sev.metrics.tfr_pct) + '% · R2A ' + n1(sev.metrics.r2a_sec) + 's · surge ' + n1(sev.metrics.surge_pct) + '%</div>' : '') +
     '<div class="kpis"><div class="kpi"><b>' + rs(d.summary.total_absolute_pending) + '</b><small>absolute pending</small></div>' +
     '<div class="kpi"><b>' + d.summary.priority_counts.P0 + '</b><small>fresh negatives (T-1)</small></div>' +
     '<div class="kpi"><b>' + d.summary.worklist_skus + '</b><small>SKUs on worklist · ' + rs(d.summary.worklist_value) + '</small></div>' +
@@ -168,6 +172,7 @@ function diagnoseCard() {
     '<div class="hero"><div class="sub">Recommended recovery</div><b>' + esc(mode.label) + '</b> · ' + mode.share_pct + '% of variance ₹<div class="sub" style="margin-top:2px">' + esc(modeText) + '</div></div>' +
     '<div class="stack">' + Object.keys(bl).map(k => bl[k].value ? '<i style="width:' + (100 * bl[k].value / total) + '%;background:' + LVC[k] + '" title="' + esc(bl[k].label) + '"></i>' : '').join('') + '</div>' +
     '<div class="legend">' + Object.keys(bl).filter(k => bl[k].tasks).map(k => '<span style="--c:' + LVC[k] + '">' + esc(bl[k].label) + ' ' + bl[k].tasks + ' · ' + bl[k].share_pct + '%</span>').join('') + '</div>';
+  if (sev.capacity === 'CONSTRAINED') h += '<div class="banner amb" style="margin-top:10px">Capacity is constrained (slow R2A and surge). Plan recovery in the low-order window and keep hours tight.</div>';
   if (g.full_recon) h += '<div class="banner red" style="margin-top:10px"><b>' + g.broken_aisles + ' broken aisles.</b> Daily recovery will not catch up. Ask your CM for a full inventory reconciliation.</div>';
   if (g.sources.length) h += '<h3>Where the variance comes from (provisional)</h3><div class="row">' + g.sources.map(x => chip(x.source, (SRC[x.source] || x.source) + ' · ' + x.items + ' · ' + rs(x.value))).join(' ') + '</div>' +
     (g.sources.some(x => x.source === 'PILFERAGE') ? '<div class="sub" style="margin-top:4px">Pilferage-prone items: create a location audit on their locations every day, not only on recovery days.</div>' : '');
@@ -182,12 +187,12 @@ function taskRow(t, withSkip) {
 }
 
 function planCard(replace) {
-  const d = S.d, p = plans(), sg = p.sugg, mi = p.mine, dev = deviates(p);
+  const d = S.d, p = plans(), sg = p.sugg, mi = p.mine, diff = changes(p);
   const byName = {};
   d.roster.forEach(r => { byName[r.name] = r; });
   const shown = S.crew.filter((c, i) => S.showCrew || c.on || i < 8);
-  let h = '<div class="card"><h2>Plan today\'s recovery</h2><p class="sub">The engine has picked your strongest auditors who were present yesterday and split the work. ' +
-    'Change anything: you know your floor. Your plan is yours; the suggestion is only recorded for comparison.</p>' +
+  let h = '<div class="card"><h2>' + (replace ? 'New plan for today' : 'Plan today\'s recovery') + '</h2><p class="sub">Your strongest accurate auditors who were present yesterday are already ticked, and the work is split between them. ' +
+    'Change anything you like. You know your floor; the suggestion is only kept for comparison.</p>' +
     (d.store.low_order_window ? '<div class="banner blu">Best window for this store: <b>' + esc(d.store.low_order_window) + '</b> (lowest orders).</div>' : '') +
     '<h3>Crew · suggested ' + n1(d.suggestion.budget_hours) + ' h</h3>' +
     shown.map(c => {
@@ -209,10 +214,9 @@ function planCard(replace) {
     '<div><span class="sub">Suggested</span><b>' + n1(sg.used_hours) + ' h</b><span class="sub">' + sg.crew.length + ' captains · ' + sg.locations + ' loc · ' + rs(sg.value) + '</span></div>' +
     '<div><span class="sub">Your plan</span><b>' + n1(mi.used_hours) + ' h</b><span class="sub">' + mi.crew.length + ' captains · ' + mi.locations + ' loc · ' + rs(mi.value) + '</span></div>' +
     '<div><span class="sub">Not covered today</span><b>' + rs(Math.max(0, d.summary.worklist_value - mi.value)) + '</b><span class="sub">' + mi.deferred.length + ' tasks to backlog</span></div></div>' +
-    (dev ? '<div class="field"><label>Your plan differs from the suggestion. Why? (your CM sees this)</label><select id="dev"><option value="">Choose a reason</option>' + S.boot.deviation_reasons.map(x => '<option' + (S.dev === x ? ' selected' : '') + '>' + esc(x) + '</option>').join('') + '</select></div>' : '') +
-    (replace ? '<div class="field"><label>Reason for replacing today\'s plan</label><input id="repl" placeholder="e.g. captain went home"></div>' : '') +
+    (diff ? '<div class="sub" style="margin-bottom:8px">Your changes: ' + esc(diff) + '</div>' : '') +
     '<div class="row"><input id="win" placeholder="Window, e.g. 14:00-17:00" value="' + esc(S.win || d.store.low_order_window || '') + '" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">' +
-    '<button class="btn" data-act="confirm"' + (mi.lines.length ? '' : ' disabled') + '>Confirm plan</button></div></div></div>';
+    '<button class="btn" data-act="confirm"' + (mi.lines.length ? '' : ' disabled') + '>' + (replace ? 'Replace today\'s plan' : 'Confirm plan') + '</button></div></div></div>';
   return h;
 }
 function hourOpts(v) { let o = ''; for (let x = 0.5; x <= S.d.settings.max_hours_per_captain + 1e-6; x += 0.5) o += '<option value="' + x + '"' + (Math.abs(x - v) < 1e-6 ? ' selected' : '') + '>' + x + ' h</option>'; return o; }
@@ -230,11 +234,13 @@ function execute(tp) {
   tp.tasks.forEach(t => { byId[t.task_id] = t; });
   tp.lines.forEach(l => { if (caps.indexOf(l.captain) < 0) caps.push(l.captain); });
   let h = '<div class="card"><div class="row"><div class="grow"><h2 style="margin:0">Today\'s plan · ' + esc(p.plan_id) + '</h2><div class="sub">Confirmed ' + esc(p.confirmed_at) + ' by ' + esc(p.confirmed_by) + (p.window ? ' · window ' + esc(p.window) : '') +
-    (p.deviation_reason ? ' · changed from suggestion: ' + esc(p.deviation_reason) : '') + '</div></div>' + chip('ON_TRACK', 'CONFIRMED') + '</div>' +
-    '<p class="sub">Send each captain their brief. Rack and aisle sweeps: create the location audits on your HHD first, then assign.</p>';
+    (p.changes_vs_suggested ? ' · your changes: ' + esc(p.changes_vs_suggested) : '') + '</div></div>' + chip('ON_TRACK', 'CONFIRMED') + '</div>' +
+    '<p class="sub">Print one page per captain and hand it over. For rack and aisle sweeps, create the location audits on your HHD before you assign them.</p>' +
+    '<div class="row"><button class="btn" data-act="export">Make printable sheet</button><button class="btn ghost" data-act="printhere">Print here</button></div>' +
+    (S.exportFile ? '<div class="banner blu" style="margin-top:8px">Ready: <a href="' + esc(S.exportFile.url) + '" target="_blank">open the sheet</a> · <a href="' + esc(S.exportFile.pdf_url) + '" target="_blank"><b>download PDF (one page per captain)</b></a></div>' : '');
   caps.forEach(c => {
     const mine = tp.lines.filter(l => l.captain === c), hrs = mine.reduce((v, l) => v + l.hours, 0);
-    h += '<div class="cap"><div class="row"><b class="grow">' + esc(c) + '</b><span class="sub">' + n1(hrs) + ' h</span><button class="btn sm ghost" data-brief="' + esc(c) + '">Copy WhatsApp brief</button></div>' +
+    h += '<div class="cap"><div class="row"><b class="grow">' + esc(c) + '</b><span class="sub">' + n1(hrs) + ' h</span></div>' +
       mine.map(l => { const t = byId[l.task_id]; if (!t) return ''; return '<details><summary>' + lv(t) + ' ' + esc(t.target) + (l.share < 0.99 ? ' · ~' + Math.round(l.share * 100) + '%' : '') + ' · ' + n1(l.hours) + ' h</summary>' + taskDetail(t) + '</details>'; }).join('') + '</div>';
   });
   if (d.settings.recovery_app_url) h += '<div style="margin-top:10px"><a class="btn ghost sm" href="' + esc(d.settings.recovery_app_url) + '" target="_blank">Record item outcomes in the Recovery App</a></div>';
@@ -243,7 +249,7 @@ function execute(tp) {
 function taskDetail(t) {
   const sop = S.d.sops[t.level] || [];
   return '<div class="sub" style="margin:4px 0">' + esc(t.reason) + '</div>' +
-    (t.level === 'LOCATION' ? '<div class="mono">' + t.location_list.map(x => esc(x.location_id) + (x.type === 'NEG' ? ' (NEG, first)' : '')).join('<br>') + '</div>' : '') +
+    (t.level === 'LOCATION' ? '<div>' + t.location_list.map(x => '<span class="loc">' + esc(x.location_id) + '</span>' + (x.type === 'NEG' ? ' <span class="sub">(NEG, first)</span>' : '')).join('<br>') + '</div>' : '') +
     (t.items.length ? '<table style="margin-top:6px"><tr><th>Item to look for</th><th class="right">Qty</th><th class="right">₹</th></tr>' + t.items.slice(0, 15).map(x => '<tr><td>' + esc(x.item_name) + (t.level === 'SEARCH' && x.upc ? '<div class="sub mono">UPC ' + esc(x.upc) + '</div>' : '') + '</td><td class="right">' + n1(x.variance_qty) + '</td><td class="right">' + rs(x.variance) + '</td></tr>').join('') + '</table>' : '') +
     (sop.length ? '<div class="sub" style="margin-top:6px"><b>How (HHD)</b></div><ol class="sub">' + sop.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol>' : '');
 }
@@ -278,7 +284,11 @@ function measureCard(m, full) {
     '<div class="kpi"><b>' + (ob ? ob.locations_audited + ' / ' + ob.locations_planned : '–') + '</b><small>planned locations audited (audit data)</small></div>' +
     '<div class="kpi"><b>' + r.recovered_items + ' / ' + r.planned_items + '</b><small>items recovered (feed) · ' + rs(r.recovered_value) + '</small></div>' +
     '<div class="kpi"><b>' + rs(m.rupees_per_hour) + '</b><small>recovered per actual man-hour</small></div></div>' +
-    (m.deviation_reason ? '<div class="sub" style="margin-top:8px">SM changed the suggestion: ' + esc(m.deviation_reason) + '</div>' : '');
+    (m.changes ? '<div class="sub" style="margin-top:8px">SM changes vs suggestion: ' + esc(m.changes) + '</div>' : '') +
+    (ob ? '<h3>Audit evidence on ' + esc(m.plan_date) + ' (from audit data)</h3><div class="row">' + ['MATCHED', 'QUALITY_GAP', 'OFF_PLAN', 'BASELINE'].map(k => chip(k, {MATCHED: 'Matched', QUALITY_GAP: 'Quality gap', OFF_PLAN: 'Off-plan', BASELINE: 'Before plan (not counted)'}[k] + ' ' + ob.counts[k])).join(' ') + '</div>' +
+      '<div class="sub" style="margin-top:4px">Matched = planned location, scan coverage at or above the quality gate. Quality gap = planned but under-scanned. Off-plan = audits elsewhere after the plan.</div>' +
+      (full && ob.events.length ? '<details><summary>Audit sessions (' + ob.events.length + ')</summary><div class="scroll"><table><tr><th>Location</th><th>Finished</th><th class="right">Coverage</th><th>Result</th></tr>' +
+        ob.events.slice(0, 120).map(x => '<tr><td class="mono">' + esc(x.location_id) + '</td><td>' + esc(String(x.end_time).slice(11, 16)) + '</td><td class="right">' + (x.coverage_pct === null ? '–' : x.coverage_pct + '%') + '</td><td>' + chip(x.class) + '</td></tr>').join('') + '</table></div></details>' : '') : '');
   if (full && S.d && S.d.nudge) h += '<div class="banner blu" style="margin-top:10px">' + esc(S.d.nudge) + '</div>';
   if (full) h += '<h3>Store variance after recovery</h3><table><tr><th>Check</th><th class="right">Absolute pending</th><th class="right">vs baseline</th><th>State</th></tr>' +
     '<tr><td>Baseline ' + esc(o.baseline ? o.baseline.date : '') + '</td><td class="right">' + (o.baseline ? rs(o.baseline.value) : '–') + '</td><td></td><td></td></tr>' +
@@ -325,7 +335,44 @@ function tower() {
     t.cohorts.map(c => '<tr><td>' + chip(c.cohort) + '</td><td class="right">' + c.stores + '</td><td class="right">' + n1(c.actual_hours) + '</td><td class="right">' + rs(c.recovered_value) + '</td><td class="right">' + rs(c.pending) + '</td><td class="right">' + rs(c.pending_then) + '</td></tr>').join('') + '</table></div>' +
     '<p class="sub">Broken stores should fall faster than their control pair. If control falls as fast, the recovery is not what moved it.</p></div>' +
     '<div class="card"><h2>Stores</h2><div class="scroll"><table><tr><th>Store</th><th>State</th><th class="right">Pending</th><th class="right">₹ / h</th><th>Flag</th></tr>' +
-    t.rows.slice().sort((a, b) => a.region.localeCompare(b.region) || a.flag.sev - b.flag.sev).map(r => '<tr class="click" data-open="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.region + (r.cohort ? ' · ' + r.cohort : '')) + '</div></td><td>' + chip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + '</div></td><td class="right">' + rs(r.pending) + '</td><td class="right">' + rs(r.window.rupees_per_hour) + '</td><td>' + chip(r.flag.code) + '</td></tr>').join('') + '</table></div></div>';
+    t.rows.slice().sort((a, b) => a.region.localeCompare(b.region) || a.flag.sev - b.flag.sev).map(r => '<tr class="click" data-open="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.region + (r.cohort ? ' · ' + r.cohort : '')) + '</div></td><td>' + chip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + (r.capacity ? ' · capacity ' + esc(r.capacity.toLowerCase().replace('_', ' ')) : '') + '</div></td><td class="right">' + rs(r.pending) + '</td><td class="right">' + rs(r.window.rupees_per_hour) + '</td><td>' + chip(r.flag.code) + '</td></tr>').join('') + '</table></div></div>';
+}
+
+// ---------------------------------------------------------------- Settings (PM) — same values as the CFG tab in the sheet
+const GROUPS = [['Severity', /^sev_/], ['Broken rack / aisle', /^(rack_|aisle_|full_|direct_|signal_|locations_per)/], ['Crew & time', /(captain|budget|minutes|gross|upc_search|audit|suggest|complex)/],
+  ['Data sources', /^(source_|inputs_|tab_|recovery_app|export_)/], ['Access', /(emails|pilot_|restrict)/], ['Other', /./]];
+function settingsView() {
+  const q = S.settings, seen = {};
+  let h = '<div class="card"><h1>Settings</h1><p class="sub">These are the CFG tab in the IRD sheet. Leave a value blank to use the default. Every change is written to ACTION_LOG with your name.</p>' +
+    (q.errors.length ? '<div class="banner red">' + esc(q.errors.join('; ')) + '</div>' : '') + '</div>';
+  GROUPS.forEach(g => {
+    const rows = q.rows.filter(r => !seen[r.key] && g[1].test(r.key));
+    if (!rows.length) return;
+    rows.forEach(r => { seen[r.key] = true; });
+    h += '<div class="card"><h2>' + g[0] + '</h2>' + rows.map(r => '<div class="field"><label>' + esc(r.label) + ' <span class="sub mono">' + esc(r.key) + '</span></label>' +
+      '<input data-set="' + esc(r.key) + '" value="' + esc(r.value) + '" placeholder="default: ' + esc(r.default) + '"><span class="sub">In use: ' + esc(r.effective || '(blank)') + '</span></div>').join('') + '</div>';
+  });
+  h += '<div class="card"><button class="btn" data-act="saveset">Save changes</button></div>';
+  h += '<div class="card"><h2>Recent actions</h2><div class="scroll"><table><tr><th>When</th><th>Who</th><th>Action</th><th>Store / plan</th><th>Detail</th></tr>' +
+    q.log.map(r => '<tr><td>' + esc(r.at) + '</td><td>' + esc(r.by) + '</td><td>' + esc(r.action) + '</td><td>' + esc([r.outlet_id, r.plan_id].filter(Boolean).join(' · ')) + '</td><td>' + esc(String(r.detail).slice(0, 160)) + '</td></tr>').join('') + '</table></div></div>';
+  return h;
+}
+
+// ---------------------------------------------------------------- printing
+function printHtml(pages) {
+  const css = 'body{font:12px Arial,sans-serif;margin:0}.pg{page-break-after:always;padding:18px}.pg:last-child{page-break-after:auto}h1{font-size:18px;margin:0 0 4px}.meta{margin-bottom:10px}' +
+    'table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px;vertical-align:top;text-align:left}th{background:#0b5d44;color:#fff}.loc{font-family:monospace;font-weight:700;font-size:13px}.box{width:44px;text-align:center}' +
+    'ol{margin:4px 0 8px 18px;padding:0}.sign{margin-top:18px;display:flex;gap:40px}.sign div{border-top:1px solid #000;padding-top:4px;min-width:160px}';
+  const body = pages.map(pg => '<div class="pg"><h1>Recovery tasks · ' + esc(pg.captain) + '</h1><div class="meta">' + esc(pg.store) + ' · ' + esc(pg.date) + (pg.window ? ' · window ' + esc(pg.window) : '') + ' · <b>' + pg.hours + ' h</b> · ' + pg.locations + ' locations · ' + esc(pg.plan_id) + '</div>' +
+    '<table><tr><th>#</th><th>Task</th><th>Where</th><th>Look for (item)</th><th>Qty</th><th class="box">Done</th><th>Found / remarks</th></tr>' +
+    pg.rows.map(r => r.items.concat(r.more_items ? [{name: '+ ' + r.more_items + ' more: check every unit', qty: ''}] : []).map((it, j) => '<tr>' + (j ? '<td></td><td></td><td></td>' : '<td>' + r.no + '</td><td>' + esc(r.task) + (r.level === 'SEARCH' ? ': ' + esc(r.target) : '') + '<br>' + r.hours + ' h</td><td class="loc">' + esc(r.where) + '</td>') +
+      '<td>' + esc(it.name) + (it.upc ? ' <span class="loc">UPC ' + esc(it.upc) + '</span>' : '') + '</td><td>' + esc(it.qty) + '</td><td class="box">☐</td><td></td></tr>').join('')).join('') + '</table>' +
+    pg.how.map(x => '<p><b>How: ' + esc(x.label) + '</b></p><ol>' + x.steps.map(st => '<li>' + esc(st) + '</li>').join('') + '</ol>').join('') +
+    '<div class="sign"><div>Captain sign</div><div>SM sign</div><div>Time done</div></div></div>').join('');
+  const w = window.open('', '_blank');
+  if (!w) { toast('Allow pop-ups to print', true); return; }
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Recovery tasks</title><style>' + css + '</style></head><body>' + body + '</body></html>');
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
 }
 
 // ---------------------------------------------------------------- actions
@@ -339,19 +386,10 @@ function taskSheet(id) {
   m.onclick = e => { if (e.target === m || e.target.dataset.close) m.remove(); };
   document.body.appendChild(m);
 }
-function copy(txt) {
-  const done = () => toast('Brief copied. Paste it in WhatsApp.');
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, () => fallback());
-  else fallback();
-  function fallback() { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('Copy failed', true); } ta.remove(); }
-}
 function doConfirm(btn) {
-  const p = plans(), dev = deviates(p);
-  if (dev && !($('dev') && $('dev').value)) { toast('Pick a reason for changing the suggestion.', true); return; }
   btn.disabled = true; btn.textContent = 'Confirming…';
-  api('RE_CONFIRM', {outlet_id: S.outlet, feed_date: S.d.summary.feed_date, crew: myCrew(), skip: Object.keys(S.skip), deviation_reason: dev ? $('dev').value : '',
-    window: $('win') ? $('win').value : '', replace_reason: $('repl') ? $('repl').value : ''})
-    .then(r => { setStore(r.view); S.cm = null; S.tower = null; S.planning = false; render(); window.scrollTo(0, 0); toast('Plan ' + r.plan_id + ' confirmed'); })
+  api('RE_CONFIRM', {outlet_id: S.outlet, feed_date: S.d.summary.feed_date, crew: myCrew(), skip: Object.keys(S.skip), window: $('win') ? $('win').value : '', token: token()})
+    .then(r => { setStore(r.view); S.cm = null; S.tower = null; S.planning = false; S.exportFile = null; render(); window.scrollTo(0, 0); toast(r.duplicate ? 'Already confirmed' : 'Plan ' + r.plan_id + ' confirmed'); })
     .catch(e => { btn.disabled = false; btn.textContent = 'Confirm plan'; toast(em(e), true); });
 }
 function doActuals(btn) {
@@ -364,7 +402,7 @@ function doActuals(btn) {
   });
   if (!rows.length) { toast('Enter hours for at least one captain.', true); return; }
   btn.disabled = true;
-  api('RE_ACTUALS', {plan_id: tp.plan.plan_id, rows}).then(d => { setStore(d); S.cm = null; S.tower = null; render(); toast('Actuals saved'); }).catch(e => { btn.disabled = false; toast(em(e), true); });
+  api('RE_ACTUALS', {plan_id: tp.plan.plan_id, rows, token: token()}).then(d => { setStore(d); S.cm = null; S.tower = null; render(); toast('Actuals saved'); }).catch(e => { btn.disabled = false; toast(em(e), true); });
 }
 function wire() {
   const q = (s, f) => document.querySelectorAll(s).forEach(f);
@@ -372,10 +410,8 @@ function wire() {
   q('[data-skip]', el => { el.onclick = () => { const id = el.dataset.skip; if (S.skip[id]) delete S.skip[id]; else S.skip[id] = true; S.planning = true; keep(render); }; });
   q('[data-con]', el => { el.onchange = () => { S.crew[+el.dataset.con].on = el.checked; S.planning = true; keep(render); }; });
   q('[data-chours]', el => { el.onchange = () => { S.crew[+el.dataset.chours].hours = Number(el.value); S.planning = true; keep(render); }; });
-  q('[data-brief]', el => { el.onclick = () => { const tp = S.d.today_plan; copy(REC.captainBrief(el.dataset.brief, {lines: tp.lines}, tp.tasks, S.d.sops, S.d.store.outlet_name, tp.plan.window)); }; });
   q('[data-cm]', el => { el.onclick = () => { S.cmOpen = el.dataset.cm; render(); const p = $('cmpanel'); if (p) p.scrollIntoView({behavior: 'smooth'}); }; });
   q('[data-open]', el => { el.onclick = () => { S.outlet = el.dataset.open; $('store').value = S.outlet; S.view = 'today'; load(); }; });
-  if ($('dev')) $('dev').onchange = () => { S.dev = $('dev').value; };
   if ($('win')) $('win').oninput = () => { S.win = $('win').value; };
   if ($('extra')) $('extra').oninput = () => { S.extra = $('extra').value; };
   q('[data-act]', b => {
@@ -390,6 +426,21 @@ function wire() {
         S.crew.push({name: nm, on: true, hours: S.d.settings.max_hours_per_captain}); S.extra = ''; S.planning = true; keep(render);
       }
       else if (a === 'confirm') doConfirm(b);
+      else if (a === 'printhere') { const tp = S.d.today_plan; printHtml(REC.printPages(tp.plan, tp.tasks, tp.lines, S.d.sops, S.d.store.outlet_name)); }
+      else if (a === 'export') {
+        b.disabled = true; b.textContent = 'Creating sheet…';
+        api('RE_EXPORT', S.d.today_plan.plan.plan_id).then(r => {
+          if (r.file && r.file.url) { S.exportFile = r.file; render(); toast('Printable sheet ready'); }
+          else { printHtml(r.pages); render(); }
+        }).catch(e => { b.disabled = false; b.textContent = 'Make printable sheet'; toast(em(e), true); });
+      }
+      else if (a === 'saveset') {
+        const ch = {};
+        document.querySelectorAll('[data-set]').forEach(el => { const r = S.settings.rows.find(x => x.key === el.dataset.set); if (r && el.value.trim() !== r.value) ch[r.key] = el.value.trim(); });
+        if (!Object.keys(ch).length) { toast('Nothing changed'); return; }
+        b.disabled = true;
+        api('RE_SETTINGS_SAVE', ch).then(q2 => { S.settings = q2; S.d = null; S.cm = null; S.tower = null; render(); toast('Saved ' + Object.keys(ch).length + ' setting(s)'); }).catch(e => { b.disabled = false; toast(em(e), true); });
+      }
       else if (a === 'actuals') doActuals(b);
       else if (a === 'cmsave') {
         const r = S.cm.rows.find(x => x.outlet_id === S.cmOpen);

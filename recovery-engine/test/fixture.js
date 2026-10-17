@@ -27,8 +27,8 @@ const find = re => path.join(dir, fs.readdirSync(dir).find(f => re.test(f)));
 const cohort = csv(find(/PILOT_COHORT\.csv$/)).slice(0, maxStores);
 const ids = cohort.map(c => c.outlet_id);
 const keep = r => ids.indexOf(r.outlet_id) >= 0;
-const locs = csv(find(/^fc20c5ec.*LOCATION_RECOVERY_RAW\.csv$/)).filter(keep).map(l => [l.outlet_id, l.location_id, l.aisle_id, l.rack_id, +l.correction_days_7d || 0, +l.current_ppi_broken_flag || 0]);
-const audits = csv(find(/AUDIT_EXECUTION_RAW\.csv$/)).filter(keep).map(a => [a.audit_date_ist, a.outlet_id, a.location_id, a.rack_id, a.session_status, a.auditor_id, +a.distinct_skus || 0, +a.found_qty || 0, a.quality_status, +a.session_elapsed_seconds || 0]);
+const locs = csv(find(/^fc20c5ec.*LOCATION_RECOVERY_RAW\.csv$/)).filter(keep).map(l => [l.outlet_id, l.location_id, l.aisle_id, l.rack_id, +l.correction_days_7d || 0, +l.current_ppi_broken_flag || 0, l.current_ppi, l.current_ideal_ppi, l.current_ppi_signal_status]);
+const audits = csv(find(/AUDIT_EXECUTION_RAW\.csv$/)).filter(keep).map(a => [a.audit_date_ist, a.outlet_id, a.location_id, a.rack_id, a.session_status, a.auditor_id, +a.distinct_skus || 0, +a.found_qty || 0, a.quality_status, +a.session_elapsed_seconds || 0, a.end_time, a.expected_sku_coverage_pct]);
 const emps = csv(find(/^c1759775.*EMPLOYEE_CAPACITY_SYNC_RAW\.csv$/)).filter(keep).map(e => ({snapshot_date: e.snapshot_date, outlet_id: e.outlet_id, employee_id: e.employee_id,
   employee_name: e.employee_name, designation: e.designation, auditor_active_hours_l7: e.auditor_active_hours_l7, missing_complaint_pct_l7: e.missing_complaint_pct_l7,
   wrong_item_complaint_pct_l7: e.wrong_item_complaint_pct_l7, recent_presence_status: e.recent_presence_status}));
@@ -54,9 +54,11 @@ cohort.forEach(c => {
       probable_locations: rnd() < 0.08 ? '[]' : '[' + loc2[1] + ']', store_total_absolute_variance: ''});
   }
 });
+const metrics = csv(find(/^f3aa4243.*STORE_HEALTH_RAW\.csv$/)).filter(keep).map(m => ({outlet_id: m.outlet_id, metric_date: m.metric_date, data_period_status: m.data_period_status,
+  ppi: m.ppi, tfr_pct: m.tfr_pct, r2a_sec: m.r2a_sec, surge_pct: m.surge_pct}));
 const health = cohort.map((c, i) => ({outlet_id: c.outlet_id, region: c.region, cohort_role: c.cohort_role, comparison_outlet_id: c.comparison_outlet_id,
   open_variance_3m: c.cohort_role === 'BROKEN' ? 450000 + i * 1000 : 120000, net_variance_2m: c.cohort_role === 'BROKEN' ? -90000 : 5000, low_order_window: '14:00-17:00'}));
 const master = {};
 cohort.forEach(c => { master[c.outlet_id] = {outlet_name: c.outlet_name, city: '', cluster: c.region, cm_sm: ''}; });
-fs.writeFileSync(path.join(__dirname, 'fixture.json'), JSON.stringify({today: TODAY, raw, health, master, emps, locs, audits}));
+fs.writeFileSync(path.join(__dirname, 'fixture.json'), JSON.stringify({today: TODAY, raw, health, metrics, master, emps, locs, audits}));
 console.log('stores', ids.length, 'raw', raw.length, 'locs', locs.length, 'audits', audits.length, 'emps', emps.length);
