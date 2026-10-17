@@ -41,8 +41,10 @@ var RE_OWN_H = {
   SOP: ['level', 'step_no', 'step'],
   HEALTH: ['checked_at', 'input', 'source', 'rows', 'outlets', 'latest_date', 'status', 'note']
 };
-var RE_RAW_NEEDED = ['update_date', 'outlet_id', 'item_id', 'item_name', 'variance', 'variance_qty', 'rnk', 'audit_decrement_qty', 'audit_increment_qty',
-  'audit_decrement_dates', 'audit_increment_dates', 'neg_loc_array', 'probable_locations'];
+// Minimum RAWItemlevel columns. Works with the lean monthly export (month_start_date, raw_synced_at) and the full C schema.
+var RE_RAW_NEEDED = ['outlet_id', 'item_id', 'item_name', 'variance', 'variance_qty', 'rnk', 'neg_loc_array', 'probable_locations'];
+var RE_RAW_OPTIONAL = ['month_start_date', 'raw_synced_at', 'update_date', 'audit_decrement_qty', 'audit_increment_qty', 'audit_decrement_dates', 'audit_increment_dates',
+  'l0', 'upc', 'mrp', 'store_total_absolute_variance'];
 
 // DRAFT handheld SOP. Rahul's ground documentation replaces these rows in the SOP tab; the app reads the tab, not this list.
 var RE_DEFAULT_SOP = [
@@ -186,7 +188,7 @@ function re_repo() {
       if (memo.raw) return memo.raw;
       var sh = src().getSheetByName('RAWItemlevel');
       if (!sh) throw new Error('RE: RAWItemlevel not found in the source sheet (C).');
-      var cols = RE_RAW_NEEDED.concat(['l0', 'upc', 'mrp', 'store_total_absolute_variance']);
+      var cols = RE_RAW_NEEDED.concat(RE_RAW_OPTIONAL);
       return (memo.raw = re_readCols(sh, RE_RAW_NEEDED, cols, 'RAWItemlevel', 'outlet_id'));
     },
     storeMaster: function () {
@@ -336,7 +338,7 @@ function RE_HEALTH() {
     } catch (e) { out.push([now, label, sourceName, 0, 0, '', 'ERROR', e.message]); }
   }
   var st = REC.resolveSettings(repo.settingsRows()).settings, ext = re_text(st.inputs_sheet_id) ? 'inputs sheet: ' : 'this sheet: ';
-  check('Variance (RAWItemlevel)', 'C: RAWItemlevel', repo.raw, 'update_date');
+  check('Variance (RAWItemlevel)', 'C: RAWItemlevel', repo.raw, 'raw_synced_at');
   check('Pilot cohort / store health', ext + (re_text(st.inputs_sheet_id) ? st.tab_health : 'IN_STORE_HEALTH'), repo.health, '');
   check('Store health (PPI / TFR / R2A / surge)', ext + (re_text(st.inputs_sheet_id) ? st.tab_store_metrics : 'IN_STORE_METRICS'), repo.storeMetrics, 'metric_date');
   check('Captains', ext + (re_text(st.inputs_sheet_id) ? st.tab_captains : 'IN_CAPTAINS'), repo.captains, 'snapshot_date');

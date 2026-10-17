@@ -46,6 +46,8 @@ Open the **CFG** tab. Column A is the setting, column B is **your value** (blank
 | `recovery_app_url` | The Recovery App (C) web link |
 | `export_folder_id` | Optional: the ID of a Drive folder for the print sheets |
 
+**Variance feed (RAWItemlevel in C):** the lean monthly export works as-is (`month_start_date, outlet_id, item_id, item_name, variance, variance_qty, rnk, neg_loc_array, probable_locations, raw_synced_at`). If the audit columns (`audit_decrement_dates`, `audit_increment_qty` …) are ever added back, the app picks them up automatically and switches to T-1/T-3 negative priority and "found after plan" proof. `INTERIM_LOCATION` is never sent to a captain, and items under `min_item_variance` (₹20) are ignored.
+
 Everything else already has Parth's numbers (PPI 18 s, TFR 99.5%, R2A 30 s, surge 2%, the full-rack 25% / 50% rules, 4.7 min per location, 0.4 conversion). Change them here or in the app's **Settings & log** screen at any time.
 
 **USERS tab** (who can do what). One row per person:

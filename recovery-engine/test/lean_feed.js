@@ -1,0 +1,32 @@
+/** Real lean RAWItemlevel rows (Oct 2026, outlet 7076): schema, INTERIM filtering, priority without audit columns, verify via variance drop. */
+const fs = require('fs'), path = require('path'), vm = require('vm'), assert = require('assert');
+vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'IRD_Core.gs'), 'utf8').replace(/if \(typeof module[^\n]*/, ''));
+const lines = fs.readFileSync(path.join(__dirname, 'raw_sample_7076.tsv'), 'utf8').trim().split('\n').map(l => l.split('\t'));
+const rows = lines.slice(1).map(v => { const o = {}; lines[0].forEach((k, i) => { o[k] = v[i] || ''; }); return o; });
+const st = Object.assign({}, REC.DEFAULTS, {rack_sweep_min_items: 4});
+const wl = REC.worklist(rows, '7076', st);
+console.log('feed', wl.summary.feed_date, 'month', wl.summary.month_start, 'audit cols', wl.summary.has_audit_columns, 'items', wl.items.length);
+assert.strictEqual(wl.summary.feed_date, '2026-10-17');
+assert.strictEqual(wl.summary.has_audit_columns, false);
+assert.ok(!wl.items.some(i => i.item_id === '10196796'), '₹0.11 noise row excluded');
+assert.ok(!wl.items.some(i => i.item_id === '10239184'), 'rank 202 excluded');
+assert.ok(wl.items.every(i => i.prob_locations.every(l => !/INTERIM/.test(l))), 'INTERIM_LOCATION removed');
+assert.strictEqual(wl.items.find(i => i.item_id === '10124129').source, 'PILFERAGE', 'Marlboro flagged');
+assert.strictEqual(wl.items[0].priority, 'TOP25');
+const dg = REC.diagnose(wl, st, []);
+dg.tasks.slice(0, 6).forEach(t => console.log(t.level.padEnd(8), t.target.padEnd(12), t.item_count + ' items', Math.round(t.value), t.est_hours + 'h', '|', t.reason));
+console.log('sources', dg.sources.map(s => s.source + ':' + s.items).join(' '));
+assert.ok(dg.tasks.some(t => t.level === 'RACK' && t.rack === 'F0-A08-012'), 'A08-012 dry-fruit rack should be a rack sweep');
+// verify on the lean feed: variance dropped for one item, new month for another
+const plan = {outlet_id: '7076', plan_date: '2026-10-17'};
+const items = [{item_id: '10142566', baseline_variance: 1299.68}, {item_id: '10121083', baseline_variance: 3849.23}, {item_id: '99999', baseline_variance: 100}];
+const later = rows.map(r => Object.assign({}, r));
+later.find(r => r.item_id === '10142566').variance = '433.22';
+const v = REC.verify(plan, items, later);
+console.log('verify', v.items.map(i => i.item_id + ':' + i.status).join(' '), 'recovered ₹', v.recovered_value, 'left feed ₹', v.left_feed_value);
+assert.strictEqual(v.items[0].status, 'REDUCED');
+assert.strictEqual(v.recovered_value, 866);
+assert.strictEqual(v.left_feed_value, 100);
+later.forEach(r => { r.month_start_date = '2026-11-01'; });
+assert.strictEqual(REC.verify(plan, items, later).items[0].status, 'NEW_MONTH');
+console.log('LEAN FEED TESTS PASSED');

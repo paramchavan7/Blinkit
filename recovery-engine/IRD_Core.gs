@@ -55,6 +55,8 @@ function RE_CORE_FACTORY() {
     {key:'complex_max_bad_pct', def:5, type:'num', label:'Bad-audit % that always clears a captain for sweeps (the more accurate half of the store is also cleared)'},
     {key:'suggest_max_bad_pct', def:50, type:'num', label:'Captains above this bad-audit % are never suggested (SM can still add them)'},
     {key:'pilferage_l0', def:'cigarettes,tobacco,liquor,chocolates,personal care,fragrances', type:'list', label:'L0 categories treated as pilferage-prone'},
+    {key:'pilferage_keywords', def:'marlboro,classic ,gold flake,dunhill,cigarette,condom,personal massager,whey,protein powder,creatine,earbuds,tws,smart watch,power bank,trimmer,perfume,eau de,attar,ghee,cashew,almond,pistachio,walnut', type:'list', label:'Item-name words treated as pilferage-prone (used when the feed has no L0)'},
+    {key:'min_item_variance', def:20, type:'num', label:'Ignore items with variance ₹ below this (rounding noise)'},
     {key:'high_value_mrp', def:500, type:'num', label:'MRP at or above which an item is pilferage-prone'},
     {key:'sev_ppi_target', def:18, type:'num', label:'Severity (Parth LiveHealth): store PPI above this = broken'},
     {key:'sev_tfr_target', def:99.5, type:'num', label:'Severity (Parth LiveHealth): TFR % below this = broken. PPI and TFR both broken = SEVERELY BROKEN'},
@@ -174,40 +176,53 @@ function RE_CORE_FACTORY() {
 
   /** Variance source bucket (provisional rules; Rahul's documented cases should replace them). */
   function sourceBucket(it, st) {
-    if (inList(st.pilferage_l0, it.l0) || it.mrp >= st.high_value_mrp) return 'PILFERAGE';
+    const name = it.item_name.toLowerCase(), kw = text(st.pilferage_keywords).toLowerCase().split(',').filter(Boolean);
+    if (inList(st.pilferage_l0, it.l0) || Math.max(it.mrp, it.unit_value) >= st.high_value_mrp || kw.some(k => name.indexOf(k) >= 0)) return 'PILFERAGE';
     if (it.recovery_status === 'NO_AUDIT_LOG') return 'AUDIT_GAP';
     if (it.neg_locations.length) return 'MISPLACED';
     return 'OTHER';
   }
 
-  /** rows = RAWItemlevel records (normalised headers). Same eligibility as C's Recovery Worklist mode. */
+  /** A real shelf location: drops INTERIM_LOCATION and anything too short to have a rack. */
+  const physical = (locs, st) => locs.filter(l => !/INTERIM/i.test(l) && text(l).split('-').length > st.rack_segments);
+
+  /**
+   * rows = RAWItemlevel records (normalised headers). Same eligibility as C's Recovery Worklist mode.
+   * Works with the full C schema (update_date, audit_* columns) and with the lean monthly export
+   * (month_start_date, raw_synced_at, no audit columns). Without audit dates, priority comes from rank.
+   */
   function worklist(rows, outletId, st) {
     const items = [];
-    let totalAbs = 0, storeTotal = 0, feedDate = '';
+    let totalAbs = 0, storeTotal = 0, feedDate = '', month = '', hasAudit = false;
     rows.forEach(r => {
       if (text(r.outlet_id) !== text(outletId)) return;
       totalAbs += Math.abs(num(r.variance));
       storeTotal = Math.max(storeTotal, Math.abs(num(r.store_total_absolute_variance)));
-      const ud = day(r.update_date);
+      const ud = day(r.update_date || r.raw_synced_at || r.month_start_date);
       if (ud > feedDate) feedDate = ud;
+      const ms = day(r.month_start_date);
+      if (ms > month) month = ms;
       const rank = num(r.rnk), variance = num(r.variance);
-      if (rank <= 0 || rank > st.rank_limit || variance <= 0) return;
+      if (rank <= 0 || rank > st.rank_limit || variance <= 0 || variance < st.min_item_variance) return;
+      const audit = has(r.audit_decrement_qty) || text(r.audit_decrement_dates) !== '';
+      if (audit) hasAudit = true;
       const vq = num(r.variance_qty), dec = num(r.audit_decrement_qty), inc = num(r.audit_increment_qty);
-      const pr = negativePriority(r.audit_decrement_dates, r.update_date);
+      const pr = audit ? negativePriority(r.audit_decrement_dates, r.update_date || r.raw_synced_at)
+        : rank <= 25 ? {score: 1, priority: 'TOP25', bucket: 'Top 25 by ₹'} : rank <= 100 ? {score: 3, priority: 'TOP100', bucket: 'Top 100 by ₹'} : {score: 4, priority: 'RANKED', bucket: 'Ranked'};
       const it = {
         item_id: text(r.item_id), item_name: text(r.item_name), l0: text(r.l0), upc: text(r.upc), mrp: num(r.mrp), rnk: rank,
-        variance, variance_qty: vq, audit_increment_qty: inc, recovery_status: recoveryStatus(dec, inc, vq),
+        variance, variance_qty: vq, unit_value: vq > 0 ? variance / vq : 0, audit_increment_qty: inc, recovery_status: audit ? recoveryStatus(dec, inc, vq) : 'UNKNOWN',
         priority: pr.priority, priority_score: pr.score, bucket: pr.bucket,
-        neg_locations: parseArrayCell(r.neg_loc_array), prob_locations: parseArrayCell(r.probable_locations)
+        neg_locations: physical(parseArrayCell(r.neg_loc_array), st), prob_locations: physical(parseArrayCell(r.probable_locations), st)
       };
       it.source = sourceBucket(it, st);
       items.push(it);
     });
     items.sort((a, b) => a.priority_score - b.priority_score || b.variance - a.variance || a.rnk - b.rnk);
     const counts = {P0: 0, P1: 0, P2: 0, P3: 0, P4: 0};
-    items.forEach(x => { counts[x.priority]++; });
+    items.forEach(x => { counts[x.priority] = (counts[x.priority] || 0) + 1; });
     return {items, summary: {
-      outlet_id: text(outletId), feed_date: feedDate,
+      outlet_id: text(outletId), feed_date: feedDate, month_start: month, has_audit_columns: hasAudit,
       total_absolute_pending: storeTotal > 0 ? storeTotal : totalAbs,
       worklist_value: items.reduce((v, x) => v + x.variance, 0), worklist_skus: items.length, priority_counts: counts
     }};
@@ -587,16 +602,20 @@ function RE_CORE_FACTORY() {
     const feed = {};
     feedRows.forEach(r => { if (text(r.outlet_id) === text(plan.outlet_id)) feed[text(r.item_id)] = r; });
     const since = text(plan.plan_date);
-    let recovered = 0, reduced = 0, base = 0;
+    let recovered = 0, reduced = 0, base = 0, leftFeed = 0;
     const out = items.map(l => {
       const f = feed[text(l.item_id)], b = num(l.baseline_variance);
       base += b;
       let status, cur = f ? num(f.variance) : null;
+      const newMonth = f && text(f.month_start_date) && day(f.month_start_date).slice(0, 7) > since.slice(0, 7);
       if (!f) status = 'NOT_IN_FEED';
+      else if (newMonth) status = 'NEW_MONTH';   // month-to-date feed reset: a drop here is not recovery
       else if (num(f.audit_increment_qty) > num(l.baseline_increment_qty) && parseArrayCell(f.audit_increment_dates).some(d => day(d) >= since)) status = 'FOUND';
       else if (cur <= 0) status = 'CLEARED';
+      else if (cur < b - 0.5) status = 'REDUCED';   // lean feed has no audit increments: a lower open variance is the evidence
       else status = 'OPEN';
-      if (status === 'CLEARED') { recovered++; reduced += Math.max(0, b - Math.max(cur || 0, 0)); }
+      if (status === 'CLEARED' || status === 'REDUCED') { recovered++; reduced += Math.max(0, b - Math.max(cur || 0, 0)); }
+      if (status === 'NOT_IN_FEED') leftFeed += b;
       if (status === 'FOUND') {
         // Value of the units found = increment since plan x baseline unit value, capped at the baseline variance.
         const bq = num(l.baseline_variance_qty), unit = bq > 0 ? b / bq : 0, found = num(f.audit_increment_qty) - num(l.baseline_increment_qty);
@@ -604,7 +623,8 @@ function RE_CORE_FACTORY() {
       }
       return {item_id: text(l.item_id), item_name: text(l.item_name), task_id: text(l.task_id), priority: text(l.priority), baseline_variance: b, current_variance: cur, status};
     });
-    return {items: out, planned_items: out.length, recovered_items: recovered, baseline_value: Math.round(base), recovered_value: Math.round(reduced)};
+    // Items that dropped out of the ranked feed are shown separately: likely cleared, but not proven, so never counted.
+    return {items: out, planned_items: out.length, recovered_items: recovered, baseline_value: Math.round(base), recovered_value: Math.round(reduced), left_feed_value: Math.round(leftFeed)};
   }
 
   function snapAt(snaps, outlet, d, exact) {

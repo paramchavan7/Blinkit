@@ -78,7 +78,7 @@ function api(fn, arg) {
   });
 }
 function toast(m, err) { const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), err ? 6000 : 2500); }
-const TONE = {SEVERELY_BROKEN: 'c-red', CONSTRAINED: 'c-red', HEALTHY: 'c-grn', MATCHED: 'c-grn', QUALITY_GAP: 'c-amb', OFF_PLAN: 'c-gry', BASELINE: 'c-blu', BROKEN: 'c-red', AT_RISK: 'c-amb', SORTED: 'c-grn', CONTROL: 'c-blu', P0: 'c-red', P1: 'c-red', P2: 'c-amb', P3: 'c-amb', P4: 'c-gry', EV: 'c-blu',
+const TONE = {TOP25: 'c-red', TOP100: 'c-amb', RANKED: 'c-gry', REDUCED: 'c-grn', NEW_MONTH: 'c-gry', SEVERELY_BROKEN: 'c-red', CONSTRAINED: 'c-red', HEALTHY: 'c-grn', MATCHED: 'c-grn', QUALITY_GAP: 'c-amb', OFF_PLAN: 'c-gry', BASELINE: 'c-blu', BROKEN: 'c-red', AT_RISK: 'c-amb', SORTED: 'c-grn', CONTROL: 'c-blu', P0: 'c-red', P1: 'c-red', P2: 'c-amb', P3: 'c-amb', P4: 'c-gry', EV: 'c-blu',
   A: 'c-grn', B: 'c-blu', C: 'c-gry', NEW: 'c-gry', PROXY: 'c-gry', FOUND: 'c-grn', CLEARED: 'c-grn', OPEN: 'c-amb', NOT_IN_FEED: 'c-gry', BETTER: 'c-grn', SUSTAINED: 'c-grn',
   WORSE: 'c-red', RELAPSED: 'c-red', FLAT: 'c-gry', PENDING: 'c-gry', NO_DATA: 'c-gry', NO_BASELINE: 'c-gry', NO_PLAN: 'c-amb', NO_ACTUALS: 'c-red', LOW_ADHERENCE: 'c-red',
   LOW_EXECUTION: 'c-red', NO_YIELD: 'c-amb', IN_PROGRESS: 'c-blu', ON_TRACK: 'c-grn', PILFERAGE: 'c-red', MISPLACED: 'c-amb', AUDIT_GAP: 'c-blu', OTHER: 'c-gry'};
@@ -166,7 +166,8 @@ function diagnoseCard() {
     (sev.reasons.length ? '<div class="sub" style="margin-top:4px">Why ' + esc(sev.tier.replace('_', ' ').toLowerCase()) + ': ' + esc(sev.reasons.join(' · ')) + '</div>' : '') +
     (sev.metrics ? '<div class="sub">Store health ' + esc(sev.metrics.date) + ': PPI ' + n1(sev.metrics.ppi) + 's · TFR ' + n1(sev.metrics.tfr_pct) + '% · R2A ' + n1(sev.metrics.r2a_sec) + 's · surge ' + n1(sev.metrics.surge_pct) + '%</div>' : '') +
     '<div class="kpis"><div class="kpi"><b>' + rs(d.summary.total_absolute_pending) + '</b><small>absolute pending</small></div>' +
-    '<div class="kpi"><b>' + d.summary.priority_counts.P0 + '</b><small>fresh negatives (T-1)</small></div>' +
+    (d.summary.has_audit_columns ? '<div class="kpi"><b>' + d.summary.priority_counts.P0 + '</b><small>fresh negatives (T-1)</small></div>'
+      : '<div class="kpi"><b>' + rs(d.diagnosis.sources.filter(x => x.source === 'PILFERAGE').reduce((v, x) => v + x.value, 0)) + '</b><small>pilferage-prone ₹</small></div>') +
     '<div class="kpi"><b>' + d.summary.worklist_skus + '</b><small>SKUs on worklist · ' + rs(d.summary.worklist_value) + '</small></div>' +
     '<div class="kpi"><b>' + n1(g.total_hours) + ' h</b><small>to clear everything</small></div></div>' +
     '<div class="hero"><div class="sub">Recommended recovery</div><b>' + esc(mode.label) + '</b> · ' + mode.share_pct + '% of variance ₹<div class="sub" style="margin-top:2px">' + esc(modeText) + '</div></div>' +
@@ -293,7 +294,8 @@ function measureCard(m, full) {
   if (full) h += '<h3>Store variance after recovery</h3><table><tr><th>Check</th><th class="right">Absolute pending</th><th class="right">vs baseline</th><th>State</th></tr>' +
     '<tr><td>Baseline ' + esc(o.baseline ? o.baseline.date : '') + '</td><td class="right">' + (o.baseline ? rs(o.baseline.value) : '–') + '</td><td></td><td></td></tr>' +
     [['T+' + S.boot.settings.t3_offset, o.t3], ['T+' + S.boot.settings.t7_offset, o.t7]].map(x => '<tr><td>' + x[0] + ' · ' + esc(x[1].date) + '</td><td class="right">' + rs(x[1].value) + '</td><td class="right">' + (x[1].change_pct === undefined || x[1].change_pct === null ? '–' : x[1].change_pct + '%') + '</td><td>' + chip(x[1].state) + '</td></tr>').join('') + '</table>' +
-    '<p class="sub">Recovered = the variance feed shows an audit increment after the plan date, or the item\'s variance cleared. SM logs never count as recovery.</p>';
+    '<p class="sub">Recovered = the variance feed shows an audit increment after the plan date, or the item\'s open variance fell or cleared. SM logs never count as recovery.' +
+    (r.left_feed_value ? ' ' + rs(r.left_feed_value) + ' of planned items left the ranked feed (likely cleared, not counted until confirmed).' : '') + '</p>';
   if (full && r.items.length) h += '<details><summary>Planned items (' + r.items.length + ')</summary><div class="scroll"><table><tr><th>Item</th><th>Status</th><th class="right">₹ at plan</th><th class="right">₹ now</th></tr>' +
     r.items.map(x => '<tr><td>' + chip(x.priority) + ' ' + esc(x.item_name) + '</td><td>' + chip(x.status) + '</td><td class="right">' + rs(x.baseline_variance) + '</td><td class="right">' + (x.current_variance === null ? '–' : rs(x.current_variance)) + '</td></tr>').join('') + '</table></div></details>';
   return h + '</div>';
