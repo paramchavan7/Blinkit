@@ -1,9 +1,13 @@
--- Query 2 (BASIC) -> paste result into the RAWItemlevel tab. Use THIS one first: it is your original query with only two fixes, so it will run.
---  1. CHANGED: final select reads ranked_capped (top 200 per store). Your original read `ranked`, which output ~2,000 rows per store
---     with empty locations after rank 200. About 10x fewer rows, so the app loads faster.
---  2. CHANGED: INTERIM_LOCATION / DAMAGED_LOCATION removed from probable locations.
--- When this works, try RAWItemlevel_with_audits.sql: it adds audit increment proof (better results), but two column names need checking.
-with bounds as (
+-- RAWItemlevel_north.sql -> tab RAWItemlevel. Item-level open variance, top 200 items per store, with NEG / probable locations.
+-- Your original query with three changes: (1) the store list is the `scope` block at the top (edit only that), (2) only the top 200
+-- per store are output (ranked_capped), (3) INTERIM_LOCATION / DAMAGED_LOCATION are never sent to a captain.
+-- Size: about 200 rows per store (200 stores = 40,000 rows). Refresh: daily, before 10:00 IST.
+with -- >>> NORTH STORES: the one list to edit. Paste every live North outlet ID here (same list in every query; get it from NORTH_OUTLETS.sql).
+scope (outlet_id) as (
+  values 4073, 4074, 4071, 3577, 3171, 5040, 5401, 4935, 4933, 6016, 6018, 6342, 6474, 7076, 6826, 7251, 7160, 7701, 7690, 8261, 7972, 8058, 8505, 8436, 8554, 8453, 8461, 7978, 4777, 4745, 4825, 6187, 6462, 6719, 6471, 6506, 7162, 7159, 6910, 7779, 7877, 8191, 8408, 8119, 8490, 8681, 8896, 8845, 8910, 8913, 8834,
+    7184, 6406, 4823, 7476, 3432, 7204, 8468, 8211
+),
+bounds as (
   select date_trunc('month', current_date - interval '1' day) as lo,
          current_date as hi
 ),
@@ -11,8 +15,7 @@ region_outlets as (
   select id as outlet_id, max_by(name, updated_at) as outlet_name, max_by(location, updated_at) as city
   from retail.console_outlet
   where business_type_id = 7
-    and id in (4073, 4074, 4071, 3577, 3171, 5040, 5401, 4935, 4933, 6016, 6018, 6342, 6474, 7076, 6826, 7251, 7160, 7701, 7690, 8261, 7972, 8058, 8505, 8436, 8554, 8453, 8461, 7978, 4777, 4745, 4825, 6187, 6462, 6719, 6471, 6506, 7162, 7159, 6910, 7779, 7877, 8191, 8408, 8119, 8490, 8681, 8896, 8845, 8910, 8913, 8834,
-    7184, 6406, 4823, 7476, 3432, 7204, 8468, 8211)   -- ADDED: pilot stores (PILOT_COHORT) that were missing
+    and id in (select outlet_id from scope)
   group by id
 ),
 item_dim as (

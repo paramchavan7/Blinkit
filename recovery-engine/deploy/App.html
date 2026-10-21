@@ -42,17 +42,20 @@ h1{font-size:18px;margin:0}h2{font-size:15px;margin:0 0 8px}h3{font-size:11px;ma
 .cap{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
 table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mute);font-weight:600;background:#f8faf9}
-.scroll{overflow:auto;border:1px solid var(--line);border-radius:8px}
+.scroll{overflow:auto;border:1px solid var(--line);border-radius:8px}.scroll td:first-child{white-space:nowrap}
 .banner{border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px}.banner.amb{background:var(--ambbg);color:var(--amb)}.banner.red{background:var(--redbg);color:var(--red)}.banner.blu{background:var(--blubg);color:var(--blu)}
 .modal{position:fixed;inset:0;background:rgba(10,20,15,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}.sheet{background:#fff;width:100%;max-width:820px;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#16211c;color:#fff;padding:10px 14px;border-radius:10px;z-index:30;max-width:90vw}.toast.err{background:var(--red)}
 details summary{cursor:pointer;font-weight:600;font-size:13px;padding:6px 0}ol{margin:4px 0 0 18px;padding:0}li{margin:2px 0}
 .inline{display:grid;grid-template-columns:1fr 90px;gap:8px;align-items:center}
+.fresh{font-size:11px;color:var(--mute);white-space:nowrap}.fresh.stale{color:var(--amb);font-weight:700}
+.rack{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:9px 2px;border-top:1px solid var(--line)}.rack.pin{background:var(--brand2)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
 @media(max-width:720px){.sumbar .triad{grid-template-columns:repeat(3,1fr);gap:6px}.sumbar .triad>div{padding:6px}.sumbar .triad b{font-size:14px}.sumbar .triad .sub{font-size:10px}.kpis{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.triad{grid-template-columns:1fr}.who{display:none}main{padding:10px 12px 90px}.hide-m{display:none}}
 </style>
 </head>
 <body>
-<div class="top"><div class="bar"><div class="logo">Recovery <span>Engine</span></div><select id="store" aria-label="Store"></select><div class="who" id="who"></div></div><div class="tabs" id="tabs"></div></div>
+<div class="top"><div class="bar"><div class="logo">Recovery <span>Engine</span></div><select id="store" aria-label="Store"></select><span class="fresh" id="fresh"></span><div class="who" id="who"></div></div><div class="tabs" id="tabs"></div></div>
 <main id="main"><div class="card">Loading…</div></main>
 <script>
 <?!= coreSrc ?>
@@ -62,7 +65,7 @@ var REC = RE_CORE_FACTORY();
 (function () {
 'use strict';
 const INITIAL = '<?= initialStore ?>';
-const S = {boot: null, d: null, outlet: '', view: 'today', crew: [], skip: {}, showAll: false, cm: null, cmOpen: '', tower: null, extra: '', settings: null, exportFile: null};
+const S = {boot: null, d: null, outlet: '', view: 'today', crew: [], skip: {}, pin: {}, showAll: false, cm: null, cmOpen: '', cmStore: {}, tower: null, scope: 'ALL', mon: null, extra: '', settings: null, exportFile: null, newer: ''};
 const token = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 const $ = id => document.getElementById(id);
 const esc = x => String(x === null || x === undefined ? '' : x).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
@@ -78,7 +81,7 @@ function api(fn, arg) {
   });
 }
 function toast(m, err) { const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), err ? 6000 : 2500); }
-const TONE = {TOP25: 'c-red', TOP100: 'c-amb', RANKED: 'c-gry', REDUCED: 'c-grn', NEW_MONTH: 'c-gry', SEVERELY_BROKEN: 'c-red', CONSTRAINED: 'c-red', HEALTHY: 'c-grn', MATCHED: 'c-grn', QUALITY_GAP: 'c-amb', OFF_PLAN: 'c-gry', BASELINE: 'c-blu', BROKEN: 'c-red', AT_RISK: 'c-amb', SORTED: 'c-grn', CONTROL: 'c-blu', P0: 'c-red', P1: 'c-red', P2: 'c-amb', P3: 'c-amb', P4: 'c-gry', EV: 'c-blu',
+const TONE = {NOW: 'c-grn', TODAY: 'c-blu', T1: 'c-gry', AWAY: 'c-amb', RUNNING: 'c-blu', FAILED: 'c-red', OFF: 'c-gry', ERROR: 'c-red', EMPTY: 'c-red', STALE: 'c-amb', OK: 'c-grn', TOP25: 'c-red', TOP100: 'c-amb', RANKED: 'c-gry', REDUCED: 'c-grn', NEW_MONTH: 'c-gry', SEVERELY_BROKEN: 'c-red', CONSTRAINED: 'c-red', HEALTHY: 'c-grn', MATCHED: 'c-grn', QUALITY_GAP: 'c-amb', OFF_PLAN: 'c-gry', BASELINE: 'c-blu', BROKEN: 'c-red', AT_RISK: 'c-amb', SORTED: 'c-grn', CONTROL: 'c-blu', P0: 'c-red', P1: 'c-red', P2: 'c-amb', P3: 'c-amb', P4: 'c-gry', EV: 'c-blu',
   A: 'c-grn', B: 'c-blu', C: 'c-gry', NEW: 'c-gry', PROXY: 'c-gry', FOUND: 'c-grn', CLEARED: 'c-grn', OPEN: 'c-amb', NOT_IN_FEED: 'c-gry', BETTER: 'c-grn', SUSTAINED: 'c-grn',
   WORSE: 'c-red', RELAPSED: 'c-red', FLAT: 'c-gry', PENDING: 'c-gry', NO_DATA: 'c-gry', NO_BASELINE: 'c-gry', NO_PLAN: 'c-amb', NO_ACTUALS: 'c-red', LOW_ADHERENCE: 'c-red',
   LOW_EXECUTION: 'c-red', NO_YIELD: 'c-amb', IN_PROGRESS: 'c-blu', ON_TRACK: 'c-grn', PILFERAGE: 'c-red', MISPLACED: 'c-amb', AUDIT_GAP: 'c-blu', OTHER: 'c-gry'};
@@ -96,25 +99,53 @@ function start() {
     const init = INITIAL && INITIAL.indexOf('<?') < 0 ? INITIAL : '';
     S.outlet = b.stores.some(s => s.outlet_id === init) ? init : (b.stores[0] || {}).outlet_id;
     sel.value = S.outlet;
-    sel.onchange = () => { S.outlet = sel.value; S.exportFile = null; S.view = ['cm', 'tower', 'settings'].indexOf(S.view) >= 0 ? 'today' : S.view; load(); };
+    sel.onchange = () => { S.outlet = sel.value; S.exportFile = null; S.view = ['cm', 'tower', 'settings', 'monitor'].indexOf(S.view) >= 0 ? 'today' : S.view; load(); };
     $('who').textContent = b.me + ' · ' + b.role;
-    if (!b.stores.length) { $('main').innerHTML = '<div class="card">No stores found. Check pilot_outlets in CFG.</div>'; return; }
+    freshLabel(b.refreshed_at);
+    setInterval(poll, 5 * 60000);
+    if (!b.stores.length) { $('main').innerHTML = '<div class="card">No stores found for you. ' + (b.role === 'PM' ? 'Fill STORE_MASTER (or pilot_outlets in CFG) and run the refresh.' : 'Ask your CM to check your outlet_ids in the USERS tab.') + '</div>'; return; }
     if (b.role === 'PM' && !init) S.view = 'tower'; else if (b.role === 'CM' && !init) S.view = 'cm';
     if (S.view === 'today') load(); else render();
-  }).catch(e => { $('main').innerHTML = '<div class="card"><h2>Could not start</h2><p>' + esc(em(e)) + '</p></div>'; });
+  }).catch(e => {
+    const m = em(e), unlisted = /USERS list|no outlet_ids/.test(m);
+    $('main').innerHTML = '<div class="card"><h2>' + (unlisted ? 'You are not set up yet' : 'Could not start') + '</h2><p>' + esc(m) + '</p>' +
+      (unlisted ? '<p class="sub">Send your CM: your work email, your store ID, and your role (SM / CM). They add one row to the USERS tab and you can open the app straight away.</p>' : '') + '</div>';
+  });
+}
+/** "Data 10:05" in the top bar; amber when the last refresh is more than 2 hours old. */
+function freshLabel(at) {
+  const el = $('fresh');
+  if (!el) return;
+  if (!at) { el.textContent = 'not refreshed yet'; el.className = 'fresh stale'; return; }
+  const age = (Date.now() - Date.parse(at.replace(' ', 'T') + '+05:30')) / 3600000;
+  el.textContent = 'Data ' + at.slice(11, 16) + (at.slice(0, 10) !== S.boot.today ? ' ' + at.slice(5, 10) : '');
+  el.className = 'fresh' + (age > 2 ? ' stale' : '');
+  el.title = 'Last refresh ' + at + '. The app refreshes every hour.';
+}
+/** Every 5 minutes: if a newer refresh exists, reload quietly, unless the SM is in the middle of planning. */
+function poll() {
+  if (document.visibilityState !== 'visible') return;
+  api('RE_PING').then(p => {
+    if (!p.refreshed_at || p.refreshed_at === S.boot.refreshed_at) return;
+    S.boot.refreshed_at = p.refreshed_at; freshLabel(p.refreshed_at);
+    if ((S.view === 'today' || S.view === 'history') && S.planning) { S.newer = p.refreshed_at; render(); return; }
+    S.cm = null; S.tower = null; S.mon = null; S.cmStore = {};
+    if (S.view === 'today' || S.view === 'history') load(); else render();
+    toast('Updated with ' + p.refreshed_at.slice(11, 16) + ' data');
+  }).catch(() => {});
 }
 function load() {
   $('main').innerHTML = '<div class="card">Loading store ' + esc(S.outlet) + '…</div>';
   api('RE_STORE', S.outlet).then(d => { setStore(d); render(); }).catch(e => { S.d = null; render(); toast(em(e), true); });
 }
 function setStore(d) {
-  S.d = d; S.skip = {}; S.showAll = false;
+  S.d = d; S.skip = {}; S.pin = {}; S.showAll = false; S.newer = '';
   S.crew = d.roster.map(c => { const s = d.suggestion.crew.find(x => x.name === c.name); return {name: c.name, on: !!s, hours: s ? s.hours : d.settings.max_hours_per_captain}; });
 }
 function tabs() {
   const r = S.boot.role, t = [['today', 'Today'], ['history', 'Store results']];
   if (r !== 'SM') t.push(['cm', 'Cluster review']);
-  if (r === 'PM') t.push(['tower', 'Control tower'], ['settings', 'Settings & log']);
+  if (r === 'PM') t.push(['tower', 'Control tower'], ['monitor', 'Monitoring'], ['settings', 'Settings & log']);
   $('tabs').innerHTML = t.map(x => '<button class="tab' + (S.view === x[0] ? ' on' : '') + '" data-v="' + x[0] + '">' + x[1] + '</button>').join('');
   document.querySelectorAll('.tab').forEach(b => { b.onclick = () => { S.view = b.dataset.v; if ((S.view === 'today' || S.view === 'history') && !S.d) load(); else render(); }; });
 }
@@ -123,9 +154,10 @@ function render() {
   const v = S.view;
   if (v === 'cm' && !S.cm) { $('main').innerHTML = '<div class="card">Loading cluster…</div>'; api('RE_CM').then(q => { S.cm = q; render(); }).catch(e => toast(em(e), true)); return; }
   if (v === 'tower' && !S.tower) { $('main').innerHTML = '<div class="card">Loading control tower…</div>'; api('RE_TOWER').then(q => { S.tower = q; render(); }).catch(e => toast(em(e), true)); return; }
+  if (v === 'monitor' && !S.mon) { $('main').innerHTML = '<div class="card">Loading monitoring…</div>'; api('RE_MONITOR').then(q => { S.mon = q; render(); }).catch(e => toast(em(e), true)); return; }
   if (v === 'settings' && !S.settings) { $('main').innerHTML = '<div class="card">Loading settings…</div>'; api('RE_SETTINGS').then(q => { S.settings = q; render(); }).catch(e => toast(em(e), true)); return; }
   if ((v === 'today' || v === 'history') && !S.d) { $('main').innerHTML = '<div class="card">Store could not be loaded.</div>'; return; }
-  $('main').innerHTML = v === 'today' ? today() : v === 'history' ? history() : v === 'cm' ? cluster() : v === 'settings' ? settingsView() : tower();
+  $('main').innerHTML = v === 'today' ? today() : v === 'history' ? history() : v === 'cm' ? cluster() : v === 'settings' ? settingsView() : v === 'monitor' ? monitorView() : tower();
   wire();
 }
 
@@ -133,7 +165,7 @@ function render() {
 function myCrew() { return S.crew.filter(c => c.on && c.name.trim()).map(c => ({name: c.name.trim(), hours: Number(c.hours)})); }
 function plans() {
   const d = S.d;
-  return {sugg: REC.allocate(d.diagnosis.tasks, d.suggestion.crew, d.roster, []), mine: REC.allocate(d.diagnosis.tasks, myCrew(), d.roster, Object.keys(S.skip))};
+  return {sugg: REC.allocate(d.diagnosis.tasks, d.suggestion.crew, d.roster, []), mine: REC.allocate(d.diagnosis.tasks, myCrew(), d.roster, Object.keys(S.skip), Object.keys(S.pin))};
 }
 const changes = p => REC.planDiff(p.sugg, p.mine);
 
@@ -145,6 +177,7 @@ function stepStrip(stage) {
 function today() {
   const d = S.d, tp = d.today_plan;
   let h = '';
+  if (S.newer) h += '<div class="banner blu">Newer data (' + esc(S.newer.slice(11, 16)) + ') is ready. <button class="btn sm ghost" data-act="reload">Load it</button> Your unsaved plan changes will be lost.</div>';
   if (d.freshness.status !== 'CURRENT') h += '<div class="banner amb">' + esc(d.freshness.label) + '. Check that RAWItemlevel refreshed today.</div>';
   if (tp) {
     const logged = tp.measure.actual.logged;
@@ -152,7 +185,20 @@ function today() {
     h += '<div class="card"><details><summary>Re-plan today (replaces ' + esc(tp.plan.plan_id) + ')</summary>' + diagnoseCard() + planCard(true) + '</details></div>';
     return h;
   }
-  return h + stepStrip(S.planning ? 1 : 0) + diagnoseCard() + planCard(false);
+  return h + stepStrip(S.planning ? 1 : 0) + diagnoseCard() + rackCard() + planCard(false);
+}
+/** Racks with most variance ₹, and a "Do first" switch: the chosen racks are allocated before everything else, to the best captain. */
+function rackCard() {
+  const rs0 = S.d.diagnosis.top_racks || [];
+  if (!rs0.length) return '';
+  return '<div class="card"><h2>Racks with most variance</h2><p class="sub">Where the missing ₹ sits. Tap <b>Do first</b> on the racks you want covered today: they go to your best captain on the floor before anything else.</p>' +
+    rs0.map(r => {
+      const on = r.task_ids.length && r.task_ids.every(id => S.pin[id]);
+      return '<div class="rack' + (on ? ' pin' : '') + '"><div><b class="mono">' + esc(r.rack) + '</b> ' +
+        '<span class="chip lv lv-' + r.level + '">' + esc(REC.LEVEL[r.level].label) + '</span>' + (r.broken ? ' ' + chip('BROKEN', 'unstable') : '') +
+        '<div class="sub">' + r.items + ' items · ' + r.variance_locations + (r.size ? ' of ' + r.size : '') + ' locations · ~' + n1(r.hours) + ' h' + (r.top_items.length ? ' · ' + esc(r.top_items.join(', ')) : '') + '</div></div>' +
+        '<div class="right"><b>' + rs(r.value) + '</b><div><button class="btn sm ' + (on ? '' : 'ghost') + '" data-pin="' + esc(r.task_ids.join('|')) + '">' + (on ? 'First ✓' : 'Do first') + '</button></div></div></div>';
+    }).join('') + '</div>';
 }
 
 function diagnoseCard() {
@@ -192,15 +238,18 @@ function planCard(replace) {
   const byName = {};
   d.roster.forEach(r => { byName[r.name] = r; });
   const shown = S.crew.filter((c, i) => S.showCrew || c.on || i < 8);
-  let h = '<div class="card"><h2>' + (replace ? 'New plan for today' : 'Plan today\'s recovery') + '</h2><p class="sub">Your strongest accurate auditors who were present yesterday are already ticked, and the work is split between them. ' +
+  const pr = d.presence || {};
+  let h = '<div class="card"><h2>' + (replace ? 'New plan for today' : 'Plan today\'s recovery') + '</h2><p class="sub">' +
+    (pr.has_today ? 'Your most accurate auditors <b>on the floor today</b> are already ticked, and the work is split between them. ' : 'No audits yet today, so the auditors who worked yesterday are ticked. ') +
     'Change anything you like. You know your floor; the suggestion is only kept for comparison.</p>' +
+    (pr.has_today ? '<div class="banner blu">' + pr.on_floor_now + ' on the floor now · ' + pr.in_today + ' audited today · audit data up to ' + esc(pr.latest_audit) + '</div>' : '') +
     (d.store.low_order_window ? '<div class="banner blu">Best window for this store: <b>' + esc(d.store.low_order_window) + '</b> (lowest orders).</div>' : '') +
     '<h3>Crew · suggested ' + n1(d.suggestion.budget_hours) + ' h</h3>' +
     shown.map(c => {
       const r = byName[c.name] || {}, i = S.crew.indexOf(c);
       const stats = r.rated ? 'IAPH ' + n1(r.iaph) + ' · bad ' + (r.bad_audit_pct === null ? '–' : r.bad_audit_pct + '%') + ' · ' + r.audits_30d + ' audits' : esc(r.basis || '');
       return '<div class="crew' + (c.on ? '' : ' off') + '"><input type="checkbox" data-con="' + i + '"' + (c.on ? ' checked' : '') + ' aria-label="Use ' + esc(c.name) + '">' +
-        '<div><b>' + esc(c.name) + '</b> ' + chip(r.tier || 'NEW', !r.tier || r.tier === 'NEW' ? 'unrated' : r.tier === 'PROXY' ? 'proxy' : 'Tier ' + r.tier) + (r.complex_ready ? ' ' + chip('A', 'sweeps') : '') + (r.present_t1 === false ? ' ' + chip('C', 'not in T-1') : '') +
+        '<div><b>' + esc(c.name) + '</b> ' + floorChip(r) + ' ' + chip(r.tier || 'NEW', !r.tier || r.tier === 'NEW' ? 'unrated' : r.tier === 'PROXY' ? 'proxy' : 'Tier ' + r.tier) + (r.complex_ready ? ' ' + chip('A', 'sweeps') : '') +
         '<div class="sub">' + (r.score ? 'Score ' + r.score + ' · ' : '') + stats + (r.designation ? ' · ' + esc(r.designation) : '') + '</div></div>' +
         '<select data-chours="' + i + '"' + (c.on ? '' : ' disabled') + '>' + hourOpts(c.hours) + '</select></div>';
     }).join('') +
@@ -216,9 +265,14 @@ function planCard(replace) {
     '<div><span class="sub">Your plan</span><b>' + n1(mi.used_hours) + ' h</b><span class="sub">' + mi.crew.length + ' captains · ' + mi.locations + ' loc · ' + rs(mi.value) + '</span></div>' +
     '<div><span class="sub">Not covered today</span><b>' + rs(Math.max(0, d.summary.worklist_value - mi.value)) + '</b><span class="sub">' + mi.deferred.length + ' tasks to backlog</span></div></div>' +
     (diff ? '<div class="sub" style="margin-bottom:8px">Your changes: ' + esc(diff) + '</div>' : '') +
+    (mi.pinned && mi.pinned.length ? '<div class="sub" style="margin-bottom:8px">Done first: ' + esc(mi.pinned.map(id => id.slice(2)).filter((x, i, a) => a.indexOf(x) === i).join(', ')) + '</div>' : '') +
     '<div class="row"><input id="win" placeholder="Window, e.g. 14:00-17:00" value="' + esc(S.win || d.store.low_order_window || '') + '" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">' +
     '<button class="btn" data-act="confirm"' + (mi.lines.length ? '' : ' disabled') + '>' + (replace ? 'Replace today\'s plan' : 'Confirm plan') + '</button></div></div></div>';
   return h;
+}
+function floorChip(r) {
+  const f = r.on_floor || 'T1';
+  return chip(f, {NOW: 'On floor · ' + r.last_seen, TODAY: 'In today · ' + r.last_seen, T1: 'Yesterday', AWAY: 'Not seen'}[f]);
 }
 function hourOpts(v) { let o = ''; for (let x = 0.5; x <= S.d.settings.max_hours_per_captain + 1e-6; x += 0.5) o += '<option value="' + x + '"' + (Math.abs(x - v) < 1e-6 ? ' selected' : '') + '>' + x + ' h</option>'; return o; }
 function crewSplit(plan, tasks) {
@@ -309,14 +363,15 @@ function history() {
 // ---------------------------------------------------------------- CM
 function cluster() {
   const rows = S.cm.rows;
-  let h = '<div class="card"><h1>Cluster review</h1><p class="sub">Are man-hours going into recovery that works? ' + rows.filter(r => r.flag.sev === 1).length + ' stores need you · last 7 days</p>' +
+  let h = '<div class="card"><h1>Cluster review</h1><p class="sub">Are man-hours going into recovery that works? ' + rows.filter(r => r.flag.sev === 1).length + ' stores need you · ' +
+    rows.filter(r => r.plan && r.plan.plan_date === S.boot.today).length + ' of ' + rows.length + ' planned today · last 7 days · data ' + esc(String(S.cm.refreshed_at).slice(11, 16)) + '</p>' +
     '<div class="scroll"><table><tr><th>Store</th><th>State</th><th class="right">Pending</th><th class="right hide-m">Hours S / P / A</th><th class="right">₹ / hour</th><th>Flag</th></tr>' +
-    rows.map(r => '<tr class="click" data-cm="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.outlet_id + ' · ' + r.region) + '</div></td><td>' + chip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + '</div></td>' +
+    rows.map(r => '<tr class="click" data-cm="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.outlet_id + ' · ' + (r.cluster || r.region)) + (r.on_floor_now ? ' · ' + r.on_floor_now + ' on floor' : '') + '</div></td><td>' + chip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + (r.top_rack ? ' · ' + esc(r.top_rack) : '') + '</div></td>' +
       '<td class="right">' + rs(r.pending) + '</td><td class="right hide-m">' + n1(r.window.suggested_hours) + ' / ' + n1(r.window.planned_hours) + ' / ' + n1(r.window.actual_hours) + '</td><td class="right">' + rs(r.window.rupees_per_hour) + '</td><td>' + chip(r.flag.code) + '</td></tr>').join('') + '</table></div></div>';
   const r = rows.find(x => x.outlet_id === S.cmOpen);
   if (r) {
     h += '<div class="card" id="cmpanel"><div class="row"><h2 class="grow" style="margin:0">' + esc(r.outlet_name) + '</h2>' + chip(r.flag.code) + '</div><p class="sub">' + esc(r.flag.text) + '</p>' +
-      (r.measure ? measureCard(r.measure, false) : '<p class="sub">No plan yet.</p>') +
+      (S.cmStore[r.outlet_id] ? (S.cmStore[r.outlet_id].history[0] ? measureCard(S.cmStore[r.outlet_id].history[0], false) : '<p class="sub">No plan yet.</p>') : '<p class="sub">Loading the latest plan…</p>') +
       (r.last_review ? '<div class="banner blu">Last decision ' + esc(r.last_review.reviewed_at) + ' by ' + esc(r.last_review.reviewed_by) + ': ' + esc(r.last_review.decision) + (r.last_review.owner ? ' · owner ' + esc(r.last_review.owner) : '') + '</div>' : '') +
       '<div class="two"><div class="field"><label>Decision</label><select id="cmdec">' + S.cm.decisions.map(x => '<option>' + esc(x) + '</option>').join('') + '</select></div><div class="field"><label>Owner</label><input id="cmown"></div></div>' +
       '<div class="two"><div class="field"><label>Next review</label><input type="date" id="cmdate"></div><div class="field"><label>Note</label><input id="cmnote"></div></div>' +
@@ -331,8 +386,9 @@ function tower() {
   const regionRows = t.regions.map(g => '<tr><td><b>' + esc(g.region) + '</b></td><td class="right">' + g.stores + '</td><td>' + chip('BROKEN', g.broken + ' broken') + ' ' + chip('AT_RISK', g.at_risk + ' at risk') + ' ' + chip('SORTED', g.sorted + ' sorted') + '</td>' +
     '<td class="right">' + g.planned_stores + ' / ' + g.stores + '</td><td class="right hide-m">' + n1(g.suggested_hours) + ' / ' + n1(g.planned_hours) + ' / ' + n1(g.actual_hours) + '</td><td class="right">' + rs(g.recovered_value) + '</td>' +
     '<td class="right">' + rs(g.rupees_per_hour) + '</td><td class="right">' + (g.pending_change_pct === null ? '–' : (g.pending_change_pct > 0 ? '+' : '') + g.pending_change_pct + '%') + '</td><td class="right">' + (g.flags ? chip('NO_ACTUALS', g.flags) : '0') + '</td></tr>').join('');
-  return '<div class="card"><h1>Control tower</h1><p class="sub">Last 7 days. Hours = suggested / planned / actual. Pending change = absolute pending now vs 7 days ago.</p>' +
+  return '<div class="card"><h1>Control tower</h1><p class="sub">Last 7 days. Hours = suggested / planned / actual. Pending change = absolute pending now vs 7 days ago. Data ' + esc(String(t.refreshed_at).slice(11, 16)) + '.</p>' +
     '<div class="scroll"><table><tr><th>Region</th><th class="right">Stores</th><th>State</th><th class="right">Planned</th><th class="right hide-m">Hours S / P / A</th><th class="right">Recovered</th><th class="right">₹ / h</th><th class="right">Pending Δ</th><th class="right">Flags</th></tr>' + regionRows + '</table></div></div>' +
+    goodnessCard(t) +
     '<div class="card"><h2>Pilot cohorts</h2><div class="scroll"><table><tr><th>Cohort</th><th class="right">Stores</th><th class="right">Actual hours</th><th class="right">Recovered</th><th class="right">Pending now</th><th class="right">7 days ago</th></tr>' +
     t.cohorts.map(c => '<tr><td>' + chip(c.cohort) + '</td><td class="right">' + c.stores + '</td><td class="right">' + n1(c.actual_hours) + '</td><td class="right">' + rs(c.recovered_value) + '</td><td class="right">' + rs(c.pending) + '</td><td class="right">' + rs(c.pending_then) + '</td></tr>').join('') + '</table></div>' +
     '<p class="sub">Broken stores should fall faster than their control pair. If control falls as fast, the recovery is not what moved it.</p></div>' +
@@ -340,9 +396,51 @@ function tower() {
     t.rows.slice().sort((a, b) => a.region.localeCompare(b.region) || a.flag.sev - b.flag.sev).map(r => '<tr class="click" data-open="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.region + (r.cohort ? ' · ' + r.cohort : '')) + '</div></td><td>' + chip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + (r.capacity ? ' · capacity ' + esc(r.capacity.toLowerCase().replace('_', ' ')) : '') + '</div></td><td class="right">' + rs(r.pending) + '</td><td class="right">' + rs(r.window.rupees_per_hour) + '</td><td>' + chip(r.flag.code) + '</td></tr>').join('') + '</table></div></div>';
 }
 
+/** Goodness metrics by day (METRICS_DAILY, written by the hourly refresh). Definitions: METRICS.md. */
+const GM = [['plan_rate_pct', 'Planned', '%', 'Stores with a confirmed plan ÷ stores that need recovery (not SORTED)'], ['closed_pct', 'Shift closed', '%', 'Plans with actual hours logged ÷ plans'],
+  ['crew_overlap_pct', 'Crew kept', '%', 'Suggested captains the SM kept (trust in the suggestion)'], ['actual_vs_planned_pct', 'Hours worked', '%', 'Actual ÷ planned man-hours'],
+  ['audited_pct', 'Locations audited', '%', 'Planned locations with a matched audit (from audit data, not the SM log)'], ['quality_gap_pct', 'Quality gap', '%', 'Planned-location audits below the coverage gate'],
+  ['recovered_value', 'Recovered', '₹', 'Variance the feed shows recovered on planned items'], ['rupees_per_hour', '₹ / man-hour', '₹', 'Recovered ₹ ÷ actual man-hours'],
+  ['locations_per_hour', 'Locations / man-hour', '', 'Matched planned locations ÷ actual man-hours'], ['t7_better_pct', 'Better at T+7', '%', 'Plans whose store pending is lower 7 days later'], ['sm_views', 'Stores opened', '', 'Stores whose SM / CM opened the app that day']];
+function goodnessCard(t) {
+  const ms = (t.metrics || []), scopes = ms.map(m => m.scope).filter((x, i, a) => a.indexOf(x) === i);
+  if (!ms.length) return '<div class="card"><h2>Goodness metrics</h2><p class="sub">They appear after the first hourly refresh.</p></div>';
+  const rows = ms.filter(m => m.scope === S.scope).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const f = (k, u, v) => v === '' || v === null || v === undefined ? '–' : u === '₹' ? rs(v) : v + (u === '%' ? '%' : '');
+  return '<div class="card"><div class="row"><h2 class="grow" style="margin:0">Goodness metrics · last 14 days</h2><select id="scope" style="padding:6px;border:1px solid var(--line);border-radius:8px">' +
+    scopes.map(x => '<option value="' + esc(x) + '"' + (x === S.scope ? ' selected' : '') + '>' + esc(x.replace(/^region:/, '').replace(/^cohort:/, 'Cohort ')) + '</option>').join('') + '</select></div>' +
+    '<p class="sub">Is the engine being used, trusted, executed, and is it paying back the man-hours? Hover a column for its definition.</p>' +
+    '<div class="scroll"><table><tr><th>Date</th><th class="right" title="Plans / stores that need recovery">Plans</th>' + GM.map(g => '<th class="right" title="' + esc(g[3]) + '">' + esc(g[1]) + '</th>').join('') + '</tr>' +
+    rows.map(m => '<tr><td>' + esc(String(m.date).slice(5)) + '</td><td class="right">' + esc(m.plans) + ' / ' + esc(m.stores_need) + '</td>' + GM.map(g => '<td class="right">' + f(g[0], g[2], m[g[0]]) + '</td>').join('') + '</tr>').join('') +
+    '</table></div></div>';
+}
+
+// ---------------------------------------------------------------- Monitoring (PM)
+function monitorView() {
+  const m = S.mon, last = m.last_ok, ageH = last ? (Date.parse(m.now.replace(' ', 'T')) - Date.parse(String(last.at).replace(' ', 'T'))) / 3600000 : null;
+  const hasTrig = (m.triggers || []).indexOf('RE_REFRESH') >= 0;
+  let h = '<div class="card"><div class="row"><h1 class="grow">Monitoring</h1><button class="btn ghost sm" data-act="monrefresh">Reload</button></div>' +
+    (!hasTrig ? '<div class="banner red">The hourly refresh is OFF. In the sheet: Recovery Engine > 3. Turn on hourly refresh + monitoring.</div>' : '') +
+    (ageH === null ? '<div class="banner red">No successful refresh yet. Run Recovery Engine > Refresh all stores now.</div>' : ageH > 2 ? '<div class="banner red">Last good refresh was ' + n1(ageH) + ' h ago (' + esc(last.at) + ').</div>'
+      : '<div class="banner blu">Last good refresh ' + esc(last.at) + ' · ' + esc(last.stores) + ' stores · ' + esc(last.seconds) + ' s</div>') +
+    (m.running ? '<div class="banner amb">A refresh started at ' + esc(m.running.at) + ' and has not finished.</div>' : '') +
+    '<div class="kpis"><div class="kpi"><b>' + m.usage.users_today + '</b><small>people used it today</small></div><div class="kpi"><b>' + m.usage.store_views_today + '</b><small>store screens opened</small></div>' +
+    '<div class="kpi"><b>' + m.usage.plans_today + '</b><small>plans confirmed today</small></div><div class="kpi"><b>' + m.usage.actuals_today + '</b><small>shifts closed today</small></div></div>' +
+    '<div class="sub" style="margin-top:6px">USERS tab: ' + esc(Object.keys(m.usage.users_listed).map(k => m.usage.users_listed[k] + ' ' + k).join(' · ') || 'empty') + ' · triggers: ' + esc((m.triggers || []).join(', ') || 'none') + '</div></div>';
+  h += '<div class="card"><h2>Data health</h2><div class="scroll"><table><tr><th>Input</th><th class="right">Rows</th><th class="right">Stores</th><th>Newest</th><th>Status</th><th>Note</th></tr>' +
+    m.health.map(r => '<tr><td>' + esc(r.input) + '</td><td class="right">' + esc(r.rows) + '</td><td class="right">' + esc(r.outlets) + '</td><td>' + esc(String(r.latest_date).slice(0, 10)) + '</td><td>' + chip(r.status) + '</td><td class="sub">' + esc(r.note) + '</td></tr>').join('') + '</table></div></div>';
+  h += '<div class="card"><h2>Refresh runs</h2><div class="scroll"><table><tr><th>At</th><th>Status</th><th class="right">Seconds</th><th class="right">Stores</th><th>Detail</th></tr>' +
+    m.runs.map(r => '<tr><td>' + esc(r.at) + '</td><td>' + chip(r.status) + '</td><td class="right">' + esc(r.seconds) + '</td><td class="right">' + esc(r.stores) + '</td><td class="sub">' + esc(r.detail) + '</td></tr>').join('') + '</table></div></div>';
+  h += '<div class="card"><h2>Errors · last 24 h (' + m.errors.length + ')</h2>' + (m.errors.length ? '<div class="scroll"><table><tr><th>At</th><th>Who</th><th>What</th></tr>' +
+    m.errors.map(r => '<tr><td>' + esc(r.at) + '</td><td>' + esc(r.by) + '</td><td class="sub">' + esc(r.detail) + '</td></tr>').join('') + '</table></div>' : '<p class="sub">None.</p>') +
+    '<p class="sub">[user] = a message the person saw (not set up, wrong store, invalid hours). [system] = a bug or outage: send these to the engine owner.</p></div>';
+  return h;
+}
+
 // ---------------------------------------------------------------- Settings (PM) — same values as the CFG tab in the sheet
-const GROUPS = [['Severity', /^sev_/], ['Broken rack / aisle', /^(rack_|aisle_|full_|direct_|signal_|locations_per)/], ['Crew & time', /(captain|budget|minutes|gross|upc_search|audit|suggest|complex)/],
-  ['Data sources', /^(source_|inputs_|tab_|recovery_app|export_)/], ['Access', /(emails|pilot_|restrict)/], ['Other', /./]];
+const GROUPS = [['Access & rollout', /(restrict|live_regions|pilot_|pm_emails|cm_emails)/], ['Severity', /^sev_/], ['Broken rack / aisle', /^(rack_|aisle_|full_|direct_|signal_|locations_per|top_racks)/],
+  ['Crew & time', /(captain|budget|minutes|gross|upc_search|audit|suggest|complex|present)/], ['Monitoring & refresh', /(alert|feed_|presence_stale|snapshot|archive)/],
+  ['Data sources', /^(source_|inputs_|tab_|recovery_app|export_)/], ['Other', /./]];
 function settingsView() {
   const q = S.settings, seen = {};
   let h = '<div class="card"><h1>Settings</h1><p class="sub">These are the CFG tab in the IRD sheet. Leave a value blank to use the default. Every change is written to ACTION_LOG with your name.</p>' +
@@ -390,7 +488,7 @@ function taskSheet(id) {
 }
 function doConfirm(btn) {
   btn.disabled = true; btn.textContent = 'Confirming…';
-  api('RE_CONFIRM', {outlet_id: S.outlet, feed_date: S.d.summary.feed_date, crew: myCrew(), skip: Object.keys(S.skip), window: $('win') ? $('win').value : '', token: token()})
+  api('RE_CONFIRM', {outlet_id: S.outlet, feed_date: S.d.summary.feed_date, crew: myCrew(), skip: Object.keys(S.skip), pin: Object.keys(S.pin), window: $('win') ? $('win').value : '', token: token()})
     .then(r => { setStore(r.view); S.cm = null; S.tower = null; S.planning = false; S.exportFile = null; render(); window.scrollTo(0, 0); toast(r.duplicate ? 'Already confirmed' : 'Plan ' + r.plan_id + ' confirmed'); })
     .catch(e => { btn.disabled = false; btn.textContent = 'Confirm plan'; toast(em(e), true); });
 }
@@ -409,10 +507,21 @@ function doActuals(btn) {
 function wire() {
   const q = (s, f) => document.querySelectorAll(s).forEach(f);
   q('[data-task]', el => { el.onclick = () => taskSheet(el.dataset.task); });
-  q('[data-skip]', el => { el.onclick = () => { const id = el.dataset.skip; if (S.skip[id]) delete S.skip[id]; else S.skip[id] = true; S.planning = true; keep(render); }; });
+  q('[data-skip]', el => { el.onclick = () => { const id = el.dataset.skip; if (S.skip[id]) delete S.skip[id]; else { S.skip[id] = true; delete S.pin[id]; } S.planning = true; keep(render); }; });
+  q('[data-pin]', el => { el.onclick = () => {
+    const ids = el.dataset.pin.split('|'), on = ids.every(id => S.pin[id]);
+    ids.forEach(id => { if (on) delete S.pin[id]; else { S.pin[id] = true; delete S.skip[id]; } });
+    S.planning = true; keep(render);
+  }; });
   q('[data-con]', el => { el.onchange = () => { S.crew[+el.dataset.con].on = el.checked; S.planning = true; keep(render); }; });
   q('[data-chours]', el => { el.onchange = () => { S.crew[+el.dataset.chours].hours = Number(el.value); S.planning = true; keep(render); }; });
-  q('[data-cm]', el => { el.onclick = () => { S.cmOpen = el.dataset.cm; render(); const p = $('cmpanel'); if (p) p.scrollIntoView({behavior: 'smooth'}); }; });
+  q('[data-cm]', el => { el.onclick = () => {
+    const id = el.dataset.cm;
+    S.cmOpen = id; render();
+    const p = $('cmpanel'); if (p) p.scrollIntoView({behavior: 'smooth'});
+    if (!S.cmStore[id]) api('RE_STORE', id).then(d => { S.cmStore[id] = d; if (S.cmOpen === id && S.view === 'cm') keep(render); }).catch(e => toast(em(e), true));
+  }; });
+  if ($('scope')) $('scope').onchange = () => { S.scope = $('scope').value; keep(render); };
   q('[data-open]', el => { el.onclick = () => { S.outlet = el.dataset.open; $('store').value = S.outlet; S.view = 'today'; load(); }; });
   if ($('win')) $('win').oninput = () => { S.win = $('win').value; };
   if ($('extra')) $('extra').oninput = () => { S.extra = $('extra').value; };
@@ -420,6 +529,8 @@ function wire() {
     const a = b.dataset.act;
     b.onclick = () => {
       if (a === 'showall') { S.showAll = true; render(); }
+      else if (a === 'reload') { S.planning = false; load(); }
+      else if (a === 'monrefresh') { S.mon = null; render(); }
       else if (a === 'showcrew') { S.showCrew = true; keep(render); }
       else if (a === 'addcrew') {
         const nm = (S.extra || '').trim();

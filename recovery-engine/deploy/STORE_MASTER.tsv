@@ -1,11 +1,11 @@
 outlet_id	outlet_name	city	region	cluster	cm_sm	low_order_window
-7184	SS Gwalior Kampoo Road ES7		UP West			
-6406	SS Gwalior Morar Road ES6		UP West			
-7877	SS Rishikesh Station Road ES4		Uttarakhand			
-6826	SS Dehradun Doon University ES21		Uttarakhand			
-4823	SS Kharar GBP Crest ES55		Tricity			
-7476	SS Mohali Balongi ES134		Tricity			
-3432	SS Jalandhar Bashirpura ES20		ROP & HP			
-7204	SS Jalandhar Model Town ES120		ROP & HP			
-8468	SS Jammu Bari Brahman ES19		Jammu			
-8211	SS Jammu Katra ES16		Jammu			
+7184	SS Gwalior Kampoo Road ES7		UP West	UP West		14:00-17:00
+6406	SS Gwalior Morar Road ES6		UP West	UP West		14:00-17:00
+7877	SS Rishikesh Station Road ES4		Uttarakhand	Uttarakhand		14:00-17:00
+6826	SS Dehradun Doon University ES21		Uttarakhand	Uttarakhand		14:00-17:00
+4823	SS Kharar GBP Crest ES55		Tricity	Tricity		14:00-17:00
+7476	SS Mohali Balongi ES134		Tricity	Tricity		14:00-17:00
+3432	SS Jalandhar Bashirpura ES20		ROP & HP	ROP & HP		14:00-17:00
+7204	SS Jalandhar Model Town ES120		ROP & HP	ROP & HP		14:00-17:00
+8468	SS Jammu Bari Brahman ES19		Jammu	Jammu		14:00-17:00
+8211	SS Jammu Katra ES16		Jammu	Jammu		14:00-17:00

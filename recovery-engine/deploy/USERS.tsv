@@ -1,0 +1,4 @@
+email	role	outlet_ids	regions	name	note
+param.chavan@grofers.com	PM			Param Chavan	owner
+cm.example@grofers.com	CM		UP West, Uttarakhand	CM name	CM: regions (or outlet_ids)
+sm.example@grofers.com	SM	7184		SM name	SM: exactly their store

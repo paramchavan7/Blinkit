@@ -13,7 +13,7 @@
  */
 function RE_CORE_FACTORY() {
   'use strict';
-  const BUILD = 'RE_V2_20261017';
+  const BUILD = 'RE_V3_20261021';
 
   // ---------------------------------------------------------------- settings
   // Every threshold the engine uses. Values marked (provisional) need calibration from pan-India data.
@@ -25,12 +25,14 @@ function RE_CORE_FACTORY() {
     {key:'tab_store_master', def:'STORE_MASTER', type:'text', label:'Tab name for the store list'},
     {key:'tab_captains', def:'EMPLOYEE_CAPACITY_SYNC_RAW', type:'text', label:'Tab name for the captain roster'},
     {key:'tab_locations', def:'LOCATION_RECOVERY_RAW', type:'text', label:'Tab name for locations'},
-    {key:'tab_audits', def:'AUDIT_EXECUTION_RAW', type:'text', label:'Tab name for audit sessions'},
+    {key:'tab_audits', def:'AUDIT_EXECUTION_RAW', type:'text', label:'Tab name for audit sessions (today and yesterday at North scale)'},
+    {key:'tab_auditor_daily', def:'AUDITOR_DAILY', type:'text', label:'Tab name for audits summed per auditor per day (captain ratings at North scale)'},
     {key:'tab_health', def:'PILOT_COHORT', type:'text', label:'Tab name for the pilot cohort'},
     {key:'tab_store_metrics', def:'STORE_HEALTH_RAW', type:'text', label:'Tab name for daily store health (PPI, TFR, R2A, surge)'},
     {key:'tab_store_variance', def:'STORE_VARIANCE_DAILY', type:'text', label:'Tab name for daily store variance (query 1)'},
     {key:'export_folder_id', def:'', type:'text', label:'Drive folder for printable captain sheets (blank = My Drive)'},
-    {key:'restrict_sm_to_users', def:'FALSE', type:'text', label:'TRUE = only people in the USERS tab can open the app, and SMs only see their outlets'},
+    {key:'restrict_sm_to_users', def:'TRUE', type:'text', label:'TRUE = only people in the USERS tab can open the app (SMs see only their outlet_ids, CMs their outlet_ids or regions). FALSE = anyone in the organisation can open it'},
+    {key:'live_regions', def:'', type:'list', label:'Regions that are live (blank = every store in STORE_MASTER). Use it to switch regions on in waves'},
     {key:'pm_emails', def:'param.chavan@grofers.com', type:'list', label:'PM / admin emails (control tower)'},
     {key:'cm_emails', def:'', type:'list', label:'CM emails (cluster review)'},
     {key:'rank_limit', def:200, type:'num', label:'Rank limit (same as C)'},
@@ -52,7 +54,9 @@ function RE_CORE_FACTORY() {
     {key:'upc_search_minutes', def:10, type:'num', label:'Measured minutes per unmapped item search'},
     {key:'max_hours_per_captain', def:3, type:'num', label:'Max recovery hours per captain per day'},
     {key:'max_budget_hours', def:12, type:'num', label:'Cap on suggested daily recovery hours per store'},
-    {key:'audit_lookback_days', def:30, type:'num', label:'Days of audit sessions used for captain IAPH / QAPH / bad-audit %'},
+    {key:'audit_lookback_days', def:7, type:'num', label:'Days of audit history used for captain IAPH / QAPH / bad-audit % (Parth\'s audit export holds about 8 days)'},
+    {key:'present_now_minutes', def:90, type:'num', label:'A captain counts as on the floor now if their last audit ended within this many minutes'},
+    {key:'top_racks_shown', def:12, type:'num', label:'Racks shown in "Racks with most variance"'},
     {key:'min_audits_for_rating', def:20, type:'num', label:'Audits a captain needs before the rating is trusted'},
     {key:'complex_max_bad_pct', def:5, type:'num', label:'Bad-audit % that always clears a captain for sweeps (the more accurate half of the store is also cleared)'},
     {key:'suggest_max_bad_pct', def:50, type:'num', label:'Captains above this bad-audit % are never suggested (SM can still add them)'},
@@ -73,7 +77,12 @@ function RE_CORE_FACTORY() {
     {key:'low_adherence_pct', def:70, type:'num', label:'Actual hours below this % of planned is flagged'},
     {key:'feed_stale_after_days', def:1, type:'num', label:'Feed older than this many days shows a warning'},
     {key:'t3_offset', def:3, type:'num', label:'Outcome check 1 (days after plan)'},
-    {key:'t7_offset', def:7, type:'num', label:'Outcome check 2 (days after plan)'}
+    {key:'t7_offset', def:7, type:'num', label:'Outcome check 2 (days after plan)'},
+    {key:'snapshot_hour', def:10, type:'num', label:'Hour (IST) after which the refresh job takes the daily store snapshot used for T+3 / T+7'},
+    {key:'feed_due_hour', def:11, type:'num', label:'Hour (IST) by which RAWItemlevel must carry today\'s date, or an alert is sent'},
+    {key:'presence_stale_hours', def:3, type:'num', label:'Alert when the newest audit session is older than this many hours (08:00-22:00)'},
+    {key:'alert_emails', def:'', type:'list', label:'Who gets monitoring alerts (blank = pm_emails)'},
+    {key:'archive_after_rows', def:150000, type:'num', label:'Log tabs (PLAN_TASKS, PLAN_ITEMS, ACTION_LOG) are archived to a separate sheet above this many rows'}
   ];
   const DEFAULTS = {};
   SETTINGS.forEach(s => { DEFAULTS[s.key] = s.def; });
@@ -101,18 +110,21 @@ function RE_CORE_FACTORY() {
     return {settings: out, errors};
   }
   const inList = (list, v) => !!text(v) && text(list).toLowerCase().split(',').map(x => x.trim()).indexOf(text(v).toLowerCase()) >= 0;
-  /** USERS tab (email, role, outlet_ids) wins; otherwise pm_emails / cm_emails; everyone else is an SM. */
+  /** USERS tab (email, role, outlet_ids, regions) wins; otherwise pm_emails / cm_emails; everyone else is an SM (blocked when restrict_sm_to_users = TRUE). */
   function access(st, email, users) {
     const u = (users || []).find(x => text(x.email).toLowerCase() === text(email).toLowerCase());
     const strict = text(st.restrict_sm_to_users).toUpperCase() === 'TRUE';
     if (u) {
       const r = text(u.role).toUpperCase();
-      return {role: ['PM', 'CM', 'SM'].indexOf(r) >= 0 ? r : 'SM', outlets: text(u.outlet_ids) ? text(u.outlet_ids).split(/\s*[,;]\s*/).filter(Boolean) : null, listed: true};
+      const list = v => text(v) ? text(v).split(/\s*[,;]\s*/).filter(Boolean) : null;
+      const rl = ['PM', 'CM', 'SM'].indexOf(r) >= 0 ? r : 'SM', outlets = list(u.outlet_ids), regions = list(u.regions);
+      if (rl === 'SM' && !outlets) fail('Your USERS row has no outlet_ids. Ask your CM to add your store.');
+      return {role: rl, outlets, regions: outlets ? null : regions, listed: true};   // CM / PM with neither see every live store
     }
     if (inList(st.pm_emails, email)) return {role: 'PM', outlets: null, listed: true};
     if (inList(st.cm_emails, email)) return {role: 'CM', outlets: null, listed: true};
-    if (strict) fail('You are not in the USERS list for this app. Ask the PM to add ' + email + '.');
-    return {role: 'SM', outlets: null, listed: false};
+    if (strict) fail('You are not in the USERS list for this app. Ask your CM or PM to add ' + email + '.');
+    return {role: 'SM', outlets: null, regions: null, listed: false};
   }
   const role = (st, email, users) => access(st, email, users).role;
   const isPilot = (st, id) => !text(st.pilot_outlets) || inList(st.pilot_outlets, id);
@@ -309,7 +321,15 @@ function RE_CORE_FACTORY() {
   function diagnose(wl, st, locRows) {
     const racks = {}, aisles = {}, master = {};
     // Physical location master + stock-correction evidence (LOCATION_RECOVERY_RAW export), optional.
+    // Two shapes: one row per location (pilot), or one row per rack with the counts already aggregated in SQL (North scale).
     (locRows || []).forEach(l => {
+      if (has(l.rack_locations)) {
+        const rk = text(l.rack_id);
+        if (!rk) return;
+        const m = master[rk] = master[rk] || {aisle: text(l.aisle_id) || aisleOf(rk, st), size: 0, direct: 0, signal: 0};
+        m.size += num(l.rack_locations); m.direct += num(l.direct_locations); m.signal += num(l.signal_locations);
+        return;
+      }
       const loc = text(l.location_id);
       if (!loc) return;
       const rk = text(l.rack_id) || rackOf(loc, st), m = master[rk] = master[rk] || {aisle: text(l.aisle_id) || aisleOf(loc, st), size: 0, direct: 0, signal: 0};
@@ -404,8 +424,28 @@ function RE_CORE_FACTORY() {
     const sources = {};
     wl.items.forEach(it => { const s = sources[it.source] = sources[it.source] || {source: it.source, items: 0, value: 0}; s.items++; s.value += it.variance; });
 
+    // Racks ranked by variance ₹ held there (an item counts in every rack that holds one of its NEG / probable locations).
+    const rackTasks = {};
+    list.forEach(t => {
+      (t.complex ? [t.rack] : t.location_list.map(l => rackOf(l.location_id, st))).forEach(rk => {
+        const a = rackTasks[rk] = rackTasks[rk] || [];
+        if (a.indexOf(t.task_id) < 0) a.push(t.task_id);
+      });
+    });
+    const byTask = {};
+    list.forEach(t => { byTask[t.task_id] = t; });
+    const topRacks = Object.keys(racks).map(k => {
+      const r = racks[k], its = Object.keys(r.items).map(id => r.items[id]).sort((a, b) => b.variance - a.variance), ab = !!(aisles[r.aisle] && aisles[r.aisle].isBroken);
+      const tids = rackTasks[k] || [], whole = tids.map(id => byTask[id]).find(t => t.complex && t.rack === k);
+      const nLoc = Object.keys(r.locs).length;
+      return {rack: k, aisle: r.aisle, value: Math.round(its.reduce((v, x) => v + x.variance, 0)), items: its.length, variance_locations: nLoc,
+        size: master[k] ? master[k].size : null, direct: master[k] ? master[k].direct : 0, broken: r.broken, level: ab ? 'AISLE' : r.broken ? 'RACK' : 'LOCATION',
+        hours: round(whole ? whole.est_hours : gross(nLoc * st.minutes_per_location, st), 2), task_ids: tids,
+        top_items: its.slice(0, 3).map(x => x.item_name), reason: whole ? whole.reason : nLoc + ' location' + (nLoc === 1 ? '' : 's') + ' to check in this rack'};
+    }).filter(r => r.value > 0 && r.task_ids.length).sort((a, b) => b.value - a.value).slice(0, Math.max(1, st.top_racks_shown));
+
     return {
-      tasks: list, by_level: byLevel, mode: mode === 'SEARCH' ? 'LOCATION' : mode, broken_racks: brokenRacks, broken_aisles: brokenAisles,
+      tasks: list, by_level: byLevel, mode: mode === 'SEARCH' ? 'LOCATION' : mode, broken_racks: brokenRacks, broken_aisles: brokenAisles, top_racks: topRacks,
       full_recon: brokenAisles >= st.full_recon_min_aisles, total_hours: round(list.reduce((v, t) => v + t.est_hours, 0), 1),
       sources: Object.keys(sources).map(k => sources[k]).sort((a, b) => b.value - a.value)
     };
@@ -429,8 +469,10 @@ function RE_CORE_FACTORY() {
    * EMPLOYEE_CAPACITY_SYNC_RAW export (employee_name, auditor_active_hours_l7, missing/wrong complaint %).
    * Without IAPH the score is a proxy (auditor hours L7 x complaint-free rate) and is labelled as such.
    * complex_approved (Y/N) overrides the metric rule for rack/aisle sweeps.
+   * pres (from presence()) marks who is on the floor today: those captains are listed and suggested first.
    */
-  function rankCaptains(rows, st, extraNames) {
+  function rankCaptains(rows, st, extraNames, pres) {
+    const P = pres || {}, anyToday = Object.keys(P).length > 0;
     const nameOf = r => text(r.captain_name) || text(r.employee_name);
     const live = rows.filter(r => nameOf(r) && text(r.active).toUpperCase() !== 'N');
     const rated = live.filter(r => num(r.audits_30d) >= st.min_audits_for_rating && num(r.iaph) > 0).map(r => num(r.iaph));
@@ -450,19 +492,23 @@ function RE_CORE_FACTORY() {
         basis = medAud > 0 ? 'proxy: auditor hours L7' : 'no audit data';
       }
       const approved = text(r.complex_approved).toUpperCase();
-      const presence = text(r.recent_presence_status).toUpperCase();
+      const presence = text(r.recent_presence_status).toUpperCase(), id = text(r.captain_id) || text(r.employee_id), p = P[id];
+      const t1 = presence ? presence.indexOf('NOT T-1') < 0 && presence.indexOf('INACTIVE') < 0 : true;
+      const floor = p ? (p.now ? 'NOW' : 'TODAY') : t1 ? 'T1' : 'AWAY';
       seen[name.toLowerCase()] = true;
-      return {name, captain_id: text(r.captain_id) || text(r.employee_id), designation: text(r.designation), iaph: num(r.iaph), qaph: num(r.qaph), bad_audit_pct: bad,
+      return {name, captain_id: id, designation: text(r.designation), iaph: num(r.iaph), qaph: num(r.qaph), bad_audit_pct: bad,
         audits_30d: num(r.audits_30d), auditor_hours_l7: num(r.auditor_active_hours_l7), rated: isRated, basis, speed: round(speed, 2), score: Math.round(100 * speed * acc),
-        present_t1: presence ? presence.indexOf('NOT T-1') < 0 && presence.indexOf('INACTIVE') < 0 : true,
+        present_t1: t1, on_floor: floor, last_seen: p ? p.last_seen : '', sessions_today: p ? p.sessions : 0,
+        available: anyToday ? !!p : t1,
         complex_ready: approved === 'Y' || approved === 'TRUE' ? true : approved === 'N' || approved === 'FALSE' ? false
           : isRated && bad !== null && (bad <= st.complex_max_bad_pct || (medBad !== null && bad <= medBad))};
     });
     (extraNames || []).forEach(n => {
-      if (text(n) && !seen[text(n).toLowerCase()]) { seen[text(n).toLowerCase()] = true; out.push({name: text(n), rated: false, basis: 'not in roster', speed: 1, score: 0, present_t1: true, complex_ready: false}); }
+      if (text(n) && !seen[text(n).toLowerCase()]) { seen[text(n).toLowerCase()] = true; out.push({name: text(n), rated: false, basis: 'not in roster', speed: 1, score: 0, present_t1: true, on_floor: 'AWAY', available: !anyToday, complex_ready: false}); }
     });
-    // Present first, then audit-evidence ratings above proxy scores (they are not on the same scale), then score.
-    out.sort((a, b) => (b.present_t1 ? 1 : 0) - (a.present_t1 ? 1 : 0) || (b.rated ? 1 : 0) - (a.rated ? 1 : 0) || b.score - a.score || a.name.localeCompare(b.name));
+    // On the floor first (audited today), then yesterday's shift, then audit-evidence ratings above proxy scores (not the same scale), then score.
+    const FLOOR = {NOW: 3, TODAY: 3, T1: 1, AWAY: 0};
+    out.sort((a, b) => (b.available ? 1 : 0) - (a.available ? 1 : 0) || FLOOR[b.on_floor] - FLOOR[a.on_floor] || (b.rated ? 1 : 0) - (a.rated ? 1 : 0) || b.score - a.score || a.name.localeCompare(b.name));
     let i = 0;
     const ratedN = out.filter(c => c.rated).length;
     out.forEach(c => {
@@ -479,11 +525,18 @@ function RE_CORE_FACTORY() {
   function auditMetrics(auditRows, outletId, today, st) {
     const from = addDays(today, -st.audit_lookback_days), by = {};
     auditRows.forEach(a => {
-      if (text(a.outlet_id) !== text(outletId) || text(a.session_status).toUpperCase() !== 'COMPLETED') return;
-      const d = day(a.audit_date_ist);
-      if (!d || d < from || d >= today) return;
-      const id = text(a.auditor_id), sec = num(a.session_elapsed_seconds);
-      if (!id || sec <= 0 || sec > 4 * 3600) return;
+      if (text(a.outlet_id) !== text(outletId)) return;
+      const d = day(a.audit_date_ist), id = text(a.auditor_id);
+      if (!d || d < from || d >= today || !id) return;
+      if (has(a.sessions)) {   // AUDITOR_DAILY: one row per auditor per day, already summed in SQL
+        const m = by[id] = by[id] || {sessions: 0, sec: 0, skus: 0, qty: 0, bad: 0, judged: 0};
+        m.sessions += num(a.sessions); m.sec += num(a.elapsed_seconds); m.skus += num(a.distinct_skus); m.qty += num(a.found_qty);
+        m.judged += num(a.judged_sessions); m.bad += num(a.below_sop_sessions);
+        return;
+      }
+      if (text(a.session_status).toUpperCase() !== 'COMPLETED') return;
+      const sec = num(a.session_elapsed_seconds);
+      if (sec <= 0 || sec > 4 * 3600) return;
       const m = by[id] = by[id] || {sessions: 0, sec: 0, skus: 0, qty: 0, bad: 0, judged: 0};
       m.sessions++; m.sec += sec; m.skus += num(a.distinct_skus); m.qty += num(a.found_qty);
       const q = text(a.quality_status).toUpperCase();
@@ -492,7 +545,30 @@ function RE_CORE_FACTORY() {
     const out = {};
     Object.keys(by).forEach(id => {
       const m = by[id], h = m.sec / 3600;
+      if (h <= 0) return;
       out[id] = {iaph: round(m.skus / h, 1), qaph: round(m.qty / h, 1), bad_audit_pct: m.judged ? round(100 * m.bad / m.judged, 1) : '', audits_30d: m.sessions};
+    });
+    return out;
+  }
+  /**
+   * Who is on the floor today: last audit end time per auditor on today's date (session rows, or AUDITOR_DAILY last_end_time).
+   * now = last audit ended within present_now_minutes of the refresh time. Only as fresh as the audit export's refresh.
+   */
+  function presence(auditRows, outletId, nowStr, st) {
+    const today = day(nowStr), nowMs = toMs(nowStr), out = {};
+    (auditRows || []).forEach(a => {
+      if (text(a.outlet_id) !== text(outletId) || day(a.audit_date_ist) !== today) return;
+      const id = text(a.auditor_id), end = toMs(a.last_end_time || a.end_time);
+      if (!id || end === null) return;
+      const p = out[id] = out[id] || {last_ms: 0, sessions: 0, name: ''};
+      if (end > p.last_ms) p.last_ms = end;
+      p.sessions += has(a.sessions) ? num(a.sessions) : 1;
+      if (!p.name) p.name = text(a.auditor_name) || [text(a.auditor_first_name), text(a.auditor_last_name)].filter(Boolean).join(' ');
+    });
+    Object.keys(out).forEach(id => {
+      const p = out[id];
+      p.last_seen = fmt(p.last_ms).slice(11, 16);
+      p.now = nowMs !== null && nowMs - p.last_ms <= st.present_now_minutes * 60000;
     });
     return out;
   }
@@ -517,7 +593,7 @@ function RE_CORE_FACTORY() {
     tasks.forEach(t => {
       perTask[t.task_id] = {audited: 0, planned: t.location_count};
       if (t.complex) rackTask[t.rack] = t.task_id;
-      else (t.location_list || []).forEach(l => { locTask[l.location_id] = t.task_id; });
+      else (t.location_list || []).forEach(l => { locTask[typeof l === 'string' ? l : l.location_id] = t.task_id; });
     });
     const matched = {}, events = [];
     auditRows.forEach(a => {
@@ -547,17 +623,19 @@ function RE_CORE_FACTORY() {
    * Greedy fill in task priority order. Complex tasks (rack/aisle) go to the highest-score complex-ready captain;
    * item tasks go to the fastest. A task can be split between captains. Captain hours = task hours / captain speed.
    */
-  function allocate(tasks, crewIn, roster, skip) {
+  function allocate(tasks, crewIn, roster, skip, pin) {
     const byName = {};
     roster.forEach(c => { byName[c.name.toLowerCase()] = c; });
     const crew = crewIn.filter(c => text(c.name) && num(c.hours) > 0).map(c => {
       const r = byName[text(c.name).toLowerCase()] || {speed: 1, score: 0, complex_ready: false};
       return {name: text(c.name), hours: num(c.hours), left: num(c.hours), speed: r.speed || 1, score: r.score || 0, complex_ready: !!r.complex_ready};
     });
-    const anyComplex = crew.some(c => c.complex_ready), skipSet = {};
+    const anyComplex = crew.some(c => c.complex_ready), skipSet = {}, pinSet = {};
     (skip || []).forEach(id => { skipSet[id] = true; });
+    (pin || []).forEach(id => { pinSet[id] = true; });
     const lines = [], deferred = [];
-    tasks.forEach(t => {
+    // Racks the SM chose to do first ("Plan first") are allocated before everything else, so the best captain gets them.
+    tasks.filter(t => pinSet[t.task_id]).concat(tasks.filter(t => !pinSet[t.task_id])).forEach(t => {
       if (skipSet[t.task_id]) { deferred.push({task_id: t.task_id, reason: 'SKIPPED_BY_SM'}); return; }
       let need = t.est_hours, covered = 0;
       while (need > 0.01) {
@@ -577,7 +655,7 @@ function RE_CORE_FACTORY() {
     const planned = {};
     lines.forEach(l => { planned[l.task_id] = (planned[l.task_id] || 0) + l.share; });
     return {
-      lines, deferred,
+      lines, deferred, pinned: tasks.filter(t => pinSet[t.task_id] && !skipSet[t.task_id]).map(t => t.task_id),
       crew: crew.map(c => ({name: c.name, hours: c.hours, used: round(c.hours - c.left, 2)})),
       hours: round(crew.reduce((v, c) => v + c.hours, 0), 2),
       used_hours: round(crew.reduce((v, c) => v + c.hours - c.left, 0), 2),
@@ -594,7 +672,7 @@ function RE_CORE_FACTORY() {
     const crew = [];
     let left = budget;
     roster.forEach(c => {
-      if (left <= 0 || !c.name || !c.present_t1 || (c.rated && c.bad_audit_pct !== null && c.bad_audit_pct > st.suggest_max_bad_pct)) return;
+      if (left <= 0 || !c.name || !(c.available === undefined ? c.present_t1 : c.available) || (c.rated && c.bad_audit_pct !== null && c.bad_audit_pct > st.suggest_max_bad_pct)) return;
       const h = Math.min(st.max_hours_per_captain, Math.ceil(left * 2) / 2);
       crew.push({name: c.name, hours: h});
       left -= h;
@@ -671,9 +749,14 @@ function RE_CORE_FACTORY() {
     return {baseline: b ? {date: day(b.snapshot_date), value: num(b.total_absolute_pending)} : null, t3, t7, overall};
   }
 
-  /** Suggested vs Planned vs Actual for one plan. */
-  function measure(plan, planTasks, planItems, actuals, feedRows, snaps, st, today, auditRows) {
-    const S = planTasks.filter(l => text(l.kind) === 'S'), P = planTasks.filter(l => text(l.kind) === 'P');
+  /**
+   * Suggested vs Planned vs Actual for one plan.
+   * basis = what was frozen at confirm: {s: suggested lines, p: planned lines, tasks: planned tasks (id, level, complex, rack, location_count,
+   * location_list), items: planned items with their baseline}. auditRows = sessions that still cover the plan date; when they no longer do,
+   * prevObserved (the result stored while they did) is used instead.
+   */
+  function measure(plan, basis, actuals, feedRows, snaps, st, today, auditRows, prevObserved) {
+    const S = basis.s || [], P = basis.p || [], planItems = basis.items || [];
     const act = latestActuals(actuals, plan.plan_id);
     const taskIds = {};
     P.forEach(l => { taskIds[text(l.task_id)] = true; });
@@ -706,9 +789,30 @@ function RE_CORE_FACTORY() {
       recovery: v,
       rupees_per_hour: actualHours > 0 ? Math.round(v.recovered_value / actualHours) : null,
       outcome: storeOutcome(plan, snaps, st, today),
-      observed: auditRows && auditRows.length ? observed(P.filter(l => text(l.detail_json)).map(l => JSON.parse(l.detail_json)), auditRows, plan, st) : null,
+      observed: auditRows ? observed(basis.tasks || [], auditRows, plan, st) : (prevObserved || null),
       changes: text(plan.changes_vs_suggested)
     };
+  }
+
+  /**
+   * Goodness metrics for one day and one group of stores. results = PLAN_RESULTS rows (current plan versions), stores = STORE_STATE rows.
+   * Adoption (plan rate, shift closed), trust in the suggestion (crew kept, hours vs suggested), execution (hours worked, planned
+   * locations audited, quality gap), outcome (₹ recovered per man-hour, locations audited per man-hour, store variance better at T+7).
+   */
+  function goodness(results, stores, d, views) {
+    const R = results.filter(r => day(r.plan_date) === d), sum = k => R.reduce((v, r) => v + num(r[k]), 0);
+    const need = stores.filter(s => text(s.severity) && text(s.severity) !== 'SORTED').length;
+    const closed = R.filter(r => text(r.actuals_logged).toUpperCase() === 'TRUE').length;
+    const avg = k => { const v = R.filter(r => has(r[k])).map(r => num(r[k])); return v.length ? Math.round(v.reduce((x, y) => x + y, 0) / v.length) : ''; };
+    const pc = (a, b) => b ? Math.round(100 * a / b) : '';
+    const sH = sum('s_hours'), pH = sum('p_hours'), aH = sum('a_hours'), planned = sum('planned_locations'), audited = sum('audited_locations');
+    const matched = sum('matched'), gap = sum('quality_gap'), rec = sum('recovered_value');
+    const t7 = R.filter(r => ['BETTER', 'WORSE', 'FLAT'].indexOf(text(r.t7_state)) >= 0);
+    return {date: d, stores: stores.length, stores_need: need, plans: R.length, plan_rate_pct: pc(R.length, need || stores.length), closed_pct: pc(closed, R.length),
+      sm_views: views || 0, s_hours: round(sH, 1), p_hours: round(pH, 1), a_hours: round(aH, 1), hours_vs_suggested_pct: pc(pH, sH), actual_vs_planned_pct: pc(aH, pH),
+      crew_overlap_pct: avg('crew_overlap_pct'), planned_locations: planned, audited_locations: audited, audited_pct: pc(audited, planned), quality_gap_pct: pc(gap, matched + gap),
+      planned_items: sum('planned_items'), recovered_items: sum('recovered_items'), recovered_value: Math.round(rec), rupees_per_hour: aH ? Math.round(rec / aH) : '',
+      locations_per_hour: aH ? round(audited / aH, 1) : '', t7_better_pct: pc(t7.filter(r => text(r.t7_state) === 'BETTER').length, t7.length)};
   }
 
   /** CM flag for one store. Lower severity number = more urgent. */
@@ -750,6 +854,7 @@ function RE_CORE_FACTORY() {
     sugg.lines.forEach(l => { ta[l.task_id] = true; });
     mine.lines.forEach(l => { tb[l.task_id] = true; });
     const dropped = Object.keys(ta).filter(k => !tb[k]).length, added = Object.keys(tb).filter(k => !ta[k]).length;
+    if ((mine.pinned || []).length) out.push(mine.pinned.length + ' chosen to do first');
     if (dropped) out.push(dropped + ' suggested task' + (dropped === 1 ? '' : 's') + ' not planned');
     if (added) out.push(added + ' extra task' + (added === 1 ? '' : 's'));
     return out.join(', ');
@@ -784,8 +889,8 @@ function RE_CORE_FACTORY() {
   }
 
   return {BUILD, SETTINGS, DEFAULTS, LEVEL, resolveSettings, role, access, isPilot, toMs, fmt, day, addDays, freshness, parseArrayCell, negativePriority,
-    recoveryStatus, rackOf, aisleOf, worklist, severity, diagnose, rankCaptains, auditMetrics, withAuditMetrics, observed, allocate, suggest, latestActuals, verify, storeOutcome,
-    measure, flag, nudge, median, stableHash, storeMetrics, varianceHistory, planDiff, printPages, TIER_RANK};
+    recoveryStatus, rackOf, aisleOf, worklist, severity, diagnose, rankCaptains, auditMetrics, withAuditMetrics, presence, observed, allocate, suggest, latestActuals, verify, storeOutcome,
+    measure, goodness, flag, nudge, median, stableHash, storeMetrics, varianceHistory, planDiff, printPages, TIER_RANK};
 }
 var REC = RE_CORE_FACTORY();
 if (typeof module !== 'undefined' && module.exports) module.exports = REC;

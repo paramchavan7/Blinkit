@@ -1,94 +1,100 @@
-# Recovery Engine: setup from zero (no coding needed)
+# Recovery Engine v3: set up for every North store (no coding needed)
 
-You need these files (all on the copy page, each with a Copy button):
+Every file is on the **copy page**, each with a Copy button. Total time: about 90 minutes the first time, most of it in Redash.
 
-| File | What it is |
+| File | Where it goes |
 |---|---|
-| `Code.gs` | All the backend. You paste it into Apps Script once. |
-| `App.html` | The app screen. You paste it into Apps Script once. |
-| `RAWItemlevel_basic.sql` | Query 2. Its result goes into the **RAWItemlevel** tab. |
-| `STORE_VARIANCE_DAILY.sql` | Query 1. Its result goes into the **STORE_VARIANCE_DAILY** tab. |
-| `PILOT_COHORT` / `STORE_MASTER` tables | Ready to paste into the tabs with those names. No query needed. |
-| `LOCATION_RECOVERY_RAW_lite.sql` | Backup only, for when you can't fork Parth's location query. |
-
-Total time: about 25 minutes the first time.
-
----
-
-## Part 1: Make the sheet (2 min)
-1. Open **https://docs.google.com/spreadsheets/u/0/create** using your work account.
-2. Click "Untitled spreadsheet" (top left) and name it **Recovery Engine**.
-
-## Part 2: Paste the code (5 min)
-3. In that sheet: **Extensions → Apps Script**. A new tab opens with a file called **Code.gs** that contains `function myFunction() { }`.
-4. Click "Untitled project" (top left) and rename it **Recovery Engine**.
-5. Click inside the code area. Press **Ctrl+A** (Mac: Cmd+A), then **Delete**. The area is now empty.
-6. Open the `Code.gs` file I sent. Press **Ctrl+A**, **Ctrl+C**, go back to Apps Script, and press **Ctrl+V**. Then **Ctrl+S** to save.
-7. On the left, next to "Files", click **+** → **HTML**. Type **App** (capital A, nothing else) and press Enter.
-8. In the new App.html, press **Ctrl+A** → **Delete**. Paste the whole `App.html` file I sent. Press **Ctrl+S**.
-   You should now see two files on the left: **Code.gs** and **App.html**.
-
-## Part 3: Let the script build the backend (2 min)
-9. Go back to the **sheet** tab and **reload the page** (F5). Wait about 10 seconds. A new menu, **Recovery Engine**, appears at the top, after "Help".
-10. Click **Recovery Engine → 1. Set up / repair tabs**.
-    - The first time, Google asks for permission: **Continue** → choose your work account → **Allow**.
-      If you see "Google hasn't verified this app": click **Advanced** → **Go to Recovery Engine**. It is your own script.
-    - After allowing, **click the menu item once more**. The first click only grants permission.
-11. A message says it is set up, and the **START_HERE** tab opens. Setup has created:
-    - **Blue tabs** (inputs you fill): RAWItemlevel, STORE_VARIANCE_DAILY, STORE_MASTER, PILOT_COHORT, STORE_HEALTH_RAW, EMPLOYEE_CAPACITY_SYNC_RAW, LOCATION_RECOVERY_RAW, AUDIT_EXECUTION_RAW
-    - **Green tabs** (the app's backend): CFG, USERS, SOP, HEALTH, PLANS, PLAN_TASKS, PLAN_ITEMS, ACTUALS, CM_REVIEWS, ACTION_LOG, DAILY
-
-## Part 4: Put the data in (10 min the first time)
-12. Run **`RAWItemlevel_basic.sql`** in your query tool. Get the result into the **RAWItemlevel** tab in either of two ways:
-    - **Sync (best):** point your query tool's Google Sheets sync at this sheet, tab **RAWItemlevel**, mode "replace". Then it refreshes by itself.
-    - **By hand:** download the result as CSV. In the sheet, click the **RAWItemlevel** tab → **File → Import → Upload** → pick the CSV → Import location **"Replace current sheet"** → **Import data**.
-13. Do the same with **`STORE_VARIANCE_DAILY.sql`** → tab **STORE_VARIANCE_DAILY**.
-14. *(Optional, unlocks more features: see START_HERE for which feature each tab unlocks.)* Column order does not matter in any tab.
-    - **PILOT_COHORT** and **STORE_MASTER**: no query needed. Copy the ready tables from the copy page, click cell **A1** of the tab, and paste. In STORE_MASTER, type `cm_sm` and `low_order_window` yourself.
-    - **STORE_HEALTH_RAW, EMPLOYEE_CAPACITY_SYNC_RAW, AUDIT_EXECUTION_RAW, LOCATION_RECOVERY_RAW**: ask Parth for the Redash links to his 4 queries with these names. Open each one, then **⋮ → Fork** to save your own copy (his edits no longer affect yours). Run it and send the result to the tab with the same name.
-    - If you can't get Parth's LOCATION_RECOVERY_RAW, run **`LOCATION_RECOVERY_RAW_lite.sql`** instead. It gives real rack sizes but no location PPI.
-15. Click **Recovery Engine → 2. Check data health**. The HEALTH tab opens. Both **required** rows must say **OK**.
-
-## Part 5: People and settings (3 min)
-16. **USERS** tab: your email is already there as PM. Add one row per person: `email`, `role` (SM, CM or PM), and for SMs `outlet_ids` (e.g. `7076`).
-17. **CFG** tab: column B is your value; leave it blank to use the default in column C. Set at least:
-    - `pilot_outlets` → the store IDs to show, e.g. `7076,7978,6826`. Blank = every store in RAWItemlevel.
-    - Every threshold (severity, broken rack and aisle, hours) already has Parth's numbers. You can change them here or in the app's Settings screen, and each change is logged.
-
-## Part 6: Publish the app (3 min)
-18. In the **Apps Script** tab: blue **Deploy** button (top right) → **New deployment** → click the gear next to "Select type" → **Web app**.
-    - Description: `v1`
-    - Execute as: **Me**
-    - Who has access: **Anyone within [your organisation]**
-    - Click **Deploy** (allow access again if asked) and **copy the Web app URL**. That link is the app.
-19. Open the link. To open one store directly, add `?store=7076` to the end.
-20. Back in the sheet: **Recovery Engine → 3. Turn on daily 10:00 job**. This keeps the before/after numbers the results screens use.
+| `Code.gs`, `Engine.gs`, `Service.gs` | Three **script** files in Apps Script (names exactly `Code`, `Engine`, `Service`) |
+| `App.html` | One **HTML** file in Apps Script named exactly `App` |
+| `NORTH_OUTLETS.sql` | Run once in Redash. Gives the North store list |
+| `RAWItemlevel_north.sql` | Redash → tab **RAWItemlevel** (daily, before 10:00) |
+| `STORE_VARIANCE_DAILY.sql` | Redash → tab **STORE_VARIANCE_DAILY** (daily) |
+| `AUDIT_SESSIONS_north.sql` | Wraps Parth's audit query → tab **AUDIT_EXECUTION_RAW** (**hourly**) |
+| `AUDITOR_DAILY_north.sql` | Wraps Parth's audit query → tab **AUDITOR_DAILY** (hourly or daily) |
+| `LOCATION_RACKS_north.sql` | Wraps Parth's location query → tab **LOCATION_RECOVERY_RAW** (daily). Backup: `LOCATION_RACKS_lite.sql` |
+| Parth's `STORE_HEALTH_RAW` and `EMPLOYEE_CAPACITY_SYNC_RAW` | Forked, with the North store list → tabs with the same names (daily) |
+| `STORE_MASTER.tsv`, `PILOT_COHORT.tsv`, `USERS.tsv` | Paste into cell A1 of those tabs |
 
 ---
 
-## When I send you an updated Code.gs or App.html
-1. Apps Script → click the file → **Ctrl+A** → **Delete** → paste the new one → **Ctrl+S**.
-2. **Deploy → Manage deployments** → pencil icon → Version: **New version** → **Deploy**. The link stays the same.
-3. In the sheet: **Recovery Engine → 1. Set up / repair tabs** (safe to run any time; it never deletes data).
+## Part 1: Two sheets (5 min)
+At North scale the input data is large (the audit sessions alone can reach 300,000 rows), and a Google Sheet holds 10 million cells. So the inputs live in their own sheet.
+1. Create **Recovery Engine** (the app) and **Recovery Engine Inputs** (data only) at https://docs.google.com/spreadsheets/u/0/create.
+2. Copy the Inputs sheet's ID from its address bar: the part between `/d/` and `/edit`.
+
+## Part 2: Paste the code (10 min)
+3. In **Recovery Engine**: **Extensions → Apps Script**. Rename the project **Recovery Engine**.
+4. Click **Code.gs** → Cmd+A → Delete → paste card **Code.gs** → Cmd+S.
+5. **+ → Script** → name it `Engine` → paste card **Engine.gs** → Cmd+S. Then **+ → Script** → `Service` → paste **Service.gs** → Cmd+S.
+6. **+ → HTML** → name it `App` → paste **App.html** → Cmd+S.
+7. **Check every file:** press Cmd+↓ in each. The last line of the three scripts reads `// ===== END OF …`, and App ends with `</html>`. If one doesn't, its paste was cut off: empty it and paste again.
+   - The project must contain only these 4 files. Delete any old IRD files: their `doGet` and other function names collide with the new ones.
+
+## Part 3: Build the backend (5 min)
+8. Reload the **Recovery Engine** sheet → menu **Recovery Engine → 1. Set up / repair tabs** → Continue → your account → **Allow**. If you see "Google hasn't verified this app", click Advanced → Go to Recovery Engine. Then click the menu item **once more**.
+9. **CFG** tab, column B:
+   - `inputs_sheet_id` = the Inputs sheet ID from step 2
+   - `alert_emails` = who gets monitoring emails (blank = `pm_emails`)
+10. Run **1. Set up / repair tabs** again. The blue input tabs are now created **in the Inputs sheet**.
+
+## Part 4: Data (60 min, once)
+11. **North list:** run `NORTH_OUTLETS.sql`, keep the North stores, and copy their outlet IDs.
+    - In `RAWItemlevel_north.sql` and `STORE_VARIANCE_DAILY.sql`, paste the IDs (comma separated) into the `scope` block at the top. That block is the only part you edit.
+12. **STORE_MASTER** (Inputs sheet): one row per live store, with `outlet_id, outlet_name, city, region, cluster, cm_sm, low_order_window`. **This tab decides which stores are live.** The pilot rows are on the copy page.
+13. **Parth's queries:** ask Parth for the Redash links to STORE_HEALTH_RAW, EMPLOYEE_CAPACITY_SYNC_RAW, AUDIT_EXECUTION_RAW and LOCATION_RECOVERY_RAW. For each one, **⋮ → Fork**. In the fork, Cmd+F for `7184` (his store list) and replace that list with the North IDs.
+    - STORE_HEALTH_RAW and EMPLOYEE_CAPACITY_SYNC_RAW forks → tabs with the same names.
+    - Make 3 new queries from `AUDIT_SESSIONS_north.sql`, `AUDITOR_DAILY_north.sql` and `LOCATION_RACKS_north.sql`. In each, paste the **whole SQL of your forked Parth query** between the `>>> PASTE` and `<<< PASTE` lines, delete `SELECT 1`, and remove any `;` at the end.
+14. **Send every query to its tab in the Inputs sheet**, in replace mode. Use the same sync Parth's V2 sheet uses (check how his RAW tabs refresh and do the same).
+    - Schedules: **AUDIT_EXECUTION_RAW hourly** (it powers "on the floor now"); AUDITOR_DAILY hourly or daily; everything else daily by 09:30.
+15. **PILOT_COHORT** (Inputs sheet): paste the ready table at A1.
+16. Menu **2. Check data health** → HEALTH tab. Both required rows must say **OK**; optional rows say OK or OFF.
+
+## Part 5: People (15 min)
+17. **USERS** tab (app sheet), one row per person (template on the copy page):
+    - **SM:** `email`, `role` = SM, `outlet_ids` = their store
+    - **CM:** role CM, plus either `regions` (e.g. `UP West, Uttarakhand`, matching STORE_MASTER region or cluster) or `outlet_ids`
+    - **PM:** role PM (sees everything)
+
+    `restrict_sm_to_users` is TRUE by default, so anyone not listed is told to ask their CM. Rows are added live; no redeploy is needed.
+
+## Part 6: Switch on (10 min)
+18. Apps Script: **Deploy → New deployment → ⚙ → Web app**. Execute as **Me**; access **Anyone within your organisation** → **Deploy** → copy the **Web app URL**. That link is the app for everyone.
+19. Sheet menu **Refresh all stores now**. This fills STORE_STATE, PLAN_RESULTS and METRICS_DAILY, and JOB_RUNS shows OK with the seconds it took.
+20. Menu **3. Turn on hourly refresh + monitoring**, then **Send a test alert to me**.
+21. **Smoke test:**
+    1. Open the URL: you land on the Control tower.
+    2. Open the Monitoring tab: the last good refresh is shown and the triggers are listed.
+    3. Ask **one SM** to open the link. They should see only their store.
+       - "Your Google account could not be verified" means their email domain is outside your Workspace: tell the owner.
+    4. With the SM: tick the crew, tap **Do first** on a rack, then **Confirm plan** → **Make printable sheet** → check the PDF.
+
+**Rolling out region by region:** CFG `live_regions` = `UP West, Uttarakhand` turns only those regions on (blank = every store in STORE_MASTER).
+
+---
+
+## When I send you new code
+1. In Apps Script, replace the content of each file I name (Cmd+A, Delete, paste, Cmd+S), then check its END line.
+2. **Deploy → Manage deployments → ✎ → Version: New version → Deploy.** The link stays the same.
+3. Menu **1. Set up / repair tabs**. It is safe any time: it never deletes data, and it keeps old-format tabs as `NAME_old_<date>`.
 
 ## Where everything shows up
 | You want | Look at |
 |---|---|
-| Who did what, when | **ACTION_LOG** tab, or the app's Settings & log screen |
-| Every plan, and what the SM changed vs the suggestion | **PLANS** (`changes_vs_suggested`) |
-| Suggested vs planned, per task and captain | **PLAN_TASKS** (`kind` S = suggested, P = planned) |
-| Actual hours logged by SMs | **ACTUALS** |
-| CM decisions | **CM_REVIEWS** |
-| Is my data complete and fresh? | **HEALTH** (menu → Check data health) |
-| Printed captain steps | **SOP**: edit the text, and the next print uses it |
-| Settings | **CFG** |
+| Is it running, is data fresh, who uses it, what failed | App → **Monitoring** (PM), or the **JOB_RUNS**, **HEALTH** and **ACTION_LOG** tabs |
+| Goodness metrics per day, region and cohort | App → Control tower, or the **METRICS_DAILY** tab (definitions: `METRICS.md`) |
+| Every plan, and what the SM changed vs the suggestion | **PLANS** (`changes_vs_suggested`, `pinned`), **PLAN_TASKS** (S = suggested, P = planned) |
+| Results per plan (S/P/A hours, audited locations, ₹, T+3 / T+7) | **PLAN_RESULTS** |
+| Settings | **CFG**, or app → Settings & log (every change is logged) |
+| Old log rows | The **Recovery Engine Archive** sheet (moved nightly at 02:00) |
 
 ## If something goes wrong
 | You see | Do this |
 |---|---|
-| No "Recovery Engine" menu | Reload the sheet and wait 10 seconds. Check that Code.gs was saved (no orange dot on the file name). |
-| "tab RAWItemlevel is missing" | Menu → 1. Set up / repair tabs |
-| HEALTH says EMPTY for a required tab | The query result was not pasted into that tab, or it went into a tab with a different name |
-| "is missing column(s): …" | Your query output is missing that column. Check the header row of the tab. |
-| The app shows old numbers after a refresh | Menu → Clear cached inputs |
-| A new version broke something | Deploy → Manage deployments → pencil → pick the previous version → Deploy (under a minute) |
+| `SyntaxError … line N, file "X"` on save or deploy | File X was cut off when pasted. Empty it, paste again, and check the END line |
+| No Recovery Engine menu | Reload the sheet and wait 10 s; check all 4 files saved (no orange dot) |
+| "tab … is missing" or "header row … was changed" | Menu → 1. Set up / repair tabs |
+| HEALTH: EMPTY on a required row | The query result went to another tab, or to the app sheet instead of the Inputs sheet |
+| An email: "Variance feed not refreshed today" | The RAWItemlevel schedule didn't run: rerun it in Redash |
+| An email: "Audit sessions are stale" | The hourly AUDIT_EXECUTION_RAW schedule stopped. "On the floor now" is out of date until it runs |
+| An email: "Refresh failed" or "did not finish" | Read JOB_RUNS. Over 5 minutes per run → tell the owner (the audit window may need shortening) |
+| A new version broke something | Deploy → Manage deployments → ✎ → pick the previous version → Deploy (under a minute) |

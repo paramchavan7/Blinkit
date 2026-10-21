@@ -1,4 +1,4 @@
-# Recovery Engine v2
+# Recovery Engine v3 (North)
 
 One product for the journey from the call: **Diagnose → Prescribe → Suggest crew → SM plans → Execute → Close shift → Measure**,
 with three views: **SM plan** (Today), **CM review** (Cluster review), **PM control tower**.
@@ -20,7 +20,12 @@ The CM can see whether those man-hours worked. Suggested, planned and actual are
 | CM | Stores sorted by flag: NO_ACTUALS, LOW_EXECUTION, LOW_ADHERENCE, RELAPSED, NO_YIELD, NO_PLAN. Decision + owner logged | `flag` |
 | PM | Region roll-up (hours S/P/A, ₹ recovered, ₹/h, pending Δ 7d), BROKEN vs CONTROL cohort, store list | `tower` in Service.gs |
 
-**Install: see [SETUP_GUIDE.md](SETUP_GUIDE.md)** (click by click, into the existing IRD V0.6 project).
+**Install: [SETUP_GUIDE.md](SETUP_GUIDE.md)** · **Execute in the browser: [HANDOFF_CHROME.md](HANDOFF_CHROME.md)** · Rollout: [ROLLOUT_PLAN.md](ROLLOUT_PLAN.md) · Training: [TRAINING.md](TRAINING.md) · Metrics: [METRICS.md](METRICS.md) · Parth demo: [PARTH_DEMO.md](PARTH_DEMO.md)
+
+## Scale (v3)
+An hourly job (`refresh` in IRD_Service.gs) reads every input once and writes STORE_STATE (one row per store: summary + the SM screen, gzip-packed),
+PLAN_RESULTS, DAILY, METRICS_DAILY and JOB_RUNS. Screens read those tabs (TextFinder lookups per store), so they stay around 2 s at 200 stores.
+Tests: `node test/run.js` (logic), `node test/gas_e2e.js` (deploy files in an Apps Script simulator), `node test/gas_scale.js 20` (200 stores).
 
 ## Files (names match the IRD V0.6 Apps Script project)
 - `IRD_Core.gs`: pure logic (also sent to the browser so plan edits are instant)
@@ -36,7 +41,3 @@ The CM can see whether those man-hours worked. Suggested, planned and actual are
 - Variance-source buckets (pilferage-prone / misplaced / never audited): rule-based placeholders until Rahul's documented cases replace them.
 - SOP steps: a draft written without seeing the HHD. Replace the rows in the `SOP` tab.
 
-## Scale notes (800 stores)
-CM and PM views compute live from RAW and the input tabs. That is fine for the 10-store pilot. Before scale, move the per-store
-measure into the daily job (write a results tab) and filter `IN_AUDITS` to 30 days. The Service layer is already split so this is a
-repo change, not a rewrite.
