@@ -102,6 +102,9 @@ function makeGas(opts) {
     deleteColumns(c, n) { this.rows.forEach(row => { if (row) row.splice(c - 1, n); }); this.maxC -= n; return this; }
     deleteRows(r, n) { hit('deleteRows', 0); this.rows.splice(r - 1, n); this.maxR = Math.max(1, this.maxR - n); return this; }
     clear() { this.rows = []; return this; }
+    clearContents() { this.rows.forEach(row => { if (row) row.forEach(c => { if (c) c.v = ''; }); }); return this; }
+    insertRowsAfter(r, n) { this.maxR += n; return this; }
+    insertColumnsAfter(c, n) { this.maxC += n; return this; }
     appendRow(vals) { hit('appendRow', vals.length); const r = this.getLastRow() + 1; this.getRange(r, 1, 1, vals.length).setValues([vals]); return this; }
   }
   class Book {
@@ -160,10 +163,26 @@ function makeGas(opts) {
         create: () => { const t = {spec, getHandlerFunction: () => fn}; triggers.push(t); return t; }}; return b; }
     },
     MailApp: {sendEmail: m => mails.push(m)},
+    // Redash API mock: opts.redash = {key, queries: {id: {columns, rows} | 'fail'}}. First call returns a job, like a real run.
+    UrlFetchApp: {fetch: (url, o) => {
+      hit('urlFetch', 0);
+      const R = opts.redash || {queries: {}}, reply = (code, obj) => ({getResponseCode: () => code, getContentText: () => typeof obj === 'string' ? obj : JSON.stringify(obj)});
+      if (!o.headers || o.headers.Authorization !== 'Key ' + R.key) return reply(403, {message: 'Invalid API key'});
+      let m = /\/api\/queries\/(\w+)\/results$/.exec(url);
+      if (m) { const q = R.queries[m[1]]; if (!q) return reply(404, {message: 'Query not found'}); return reply(200, {job: {id: 'job-' + m[1], status: 1}}); }
+      m = /\/api\/jobs\/job-(\w+)$/.exec(url);
+      if (m) { const q = R.queries[m[1]]; return reply(200, {job: q === 'fail' ? {id: 'job-' + m[1], status: 4, error: 'Query failed: table not found'} : {id: 'job-' + m[1], status: 3, query_result_id: 'r' + m[1]}}); }
+      m = /\/api\/query_results\/r(\w+)$/.exec(url);
+      if (m) return reply(200, {query_result: {id: 'r' + m[1], retrieved_at: '2026-10-21T10:00:00', data: R.queries[m[1]]}});
+      return reply(404, 'not found');
+    }},
     DriveApp: {getFileById: () => ({moveTo() {}, setSharing() {}}), getFolderById: () => ({}), Access: {DOMAIN_WITH_LINK: 'D'}, Permission: {VIEW: 'V'}},
     HtmlService: {
       createTemplateFromFile: name => {
         const src = fs.readFileSync(opts.htmlDir + '/' + name + '.html', 'utf8'), t = {};
+        // Real HtmlService treats every "<?" as the start of a scriptlet: any stray one breaks doGet with a SyntaxError.
+        const stray = src.replace(/<\?!?=\s*\w+\s*\?>/g, '').indexOf('<?');
+        if (stray >= 0) throw new Error('SyntaxError: Invalid or unexpected token (HtmlService scriptlet at character ' + stray + ' of ' + name + '.html)');
         t.evaluate = () => {
           const html = src.replace(/<\?!=\s*(\w+)\s*\?>/g, (m, k) => String(t[k])).replace(/<\?=\s*(\w+)\s*\?>/g, (m, k) => String(t[k]).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';'));
           const out = {html, setTitle() { return out; }, addMetaTag() { return out; }, setXFrameOptionsMode() { return out; }, getContent: () => html};

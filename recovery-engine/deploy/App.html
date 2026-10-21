@@ -96,7 +96,7 @@ function start() {
     S.boot = b;
     const sel = $('store');
     sel.innerHTML = b.stores.map(s => '<option value="' + esc(s.outlet_id) + '">' + esc(s.outlet_id + ' · ' + s.outlet_name.replace(/^SS |^LT /, '') + ' · ' + s.region) + '</option>').join('');
-    const init = INITIAL && INITIAL.indexOf('<?') < 0 ? INITIAL : '';
+    const init = INITIAL && INITIAL.indexOf('<' + '?') < 0 ? INITIAL : '';   // never write the two characters together: HtmlService reads them as a scriptlet
     S.outlet = b.stores.some(s => s.outlet_id === init) ? init : (b.stores[0] || {}).outlet_id;
     sel.value = S.outlet;
     sel.onchange = () => { S.outlet = sel.value; S.exportFile = null; S.view = ['cm', 'tower', 'settings', 'monitor'].indexOf(S.view) >= 0 ? 'today' : S.view; load(); };
@@ -429,6 +429,8 @@ function monitorView() {
     '<div class="sub" style="margin-top:6px">USERS tab: ' + esc(Object.keys(m.usage.users_listed).map(k => m.usage.users_listed[k] + ' ' + k).join(' · ') || 'empty') + ' · triggers: ' + esc((m.triggers || []).join(', ') || 'none') + '</div></div>';
   h += '<div class="card"><h2>Data health</h2><div class="scroll"><table><tr><th>Input</th><th class="right">Rows</th><th class="right">Stores</th><th>Newest</th><th>Status</th><th>Note</th></tr>' +
     m.health.map(r => '<tr><td>' + esc(r.input) + '</td><td class="right">' + esc(r.rows) + '</td><td class="right">' + esc(r.outlets) + '</td><td>' + esc(String(r.latest_date).slice(0, 10)) + '</td><td>' + chip(r.status) + '</td><td class="sub">' + esc(r.note) + '</td></tr>').join('') + '</table></div></div>';
+  if (m.sync) h += '<div class="card"><h2>Redash sync</h2><div class="scroll"><table><tr><th>Tab</th><th>Query</th><th>Every</th><th>Last sync</th><th class="right">Rows</th><th>Status</th><th>Note</th></tr>' +
+    m.sync.map(r => '<tr><td>' + esc(r.tab) + '</td><td>' + esc(r.query || '–') + '</td><td>' + esc(r.refresh) + '</td><td>' + esc(r.last) + '</td><td class="right">' + esc(r.rows) + '</td><td>' + (r.status ? chip(r.status) : '') + '</td><td class="sub">' + esc(r.note) + '</td></tr>').join('') + '</table></div></div>';
   h += '<div class="card"><h2>Refresh runs</h2><div class="scroll"><table><tr><th>At</th><th>Status</th><th class="right">Seconds</th><th class="right">Stores</th><th>Detail</th></tr>' +
     m.runs.map(r => '<tr><td>' + esc(r.at) + '</td><td>' + chip(r.status) + '</td><td class="right">' + esc(r.seconds) + '</td><td class="right">' + esc(r.stores) + '</td><td class="sub">' + esc(r.detail) + '</td></tr>').join('') + '</table></div></div>';
   h += '<div class="card"><h2>Errors · last 24 h (' + m.errors.length + ')</h2>' + (m.errors.length ? '<div class="scroll"><table><tr><th>At</th><th>Who</th><th>What</th></tr>' +

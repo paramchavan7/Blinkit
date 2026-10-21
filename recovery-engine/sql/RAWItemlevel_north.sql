@@ -1,11 +1,11 @@
--- RAWItemlevel_north.sql -> tab RAWItemlevel. Item-level open variance, top 200 items per store, with NEG / probable locations.
--- Your original query with three changes: (1) the store list is the `scope` block at the top (edit only that), (2) only the top 200
--- per store are output (ranked_capped), (3) INTERIM_LOCATION / DAMAGED_LOCATION are never sent to a captain.
--- Size: about 200 rows per store (200 stores = 40,000 rows). Refresh: daily, before 10:00 IST.
-with -- >>> NORTH STORES: the one list to edit. Paste every live North outlet ID here (same list in every query; get it from NORTH_OUTLETS.sql).
+-- RAWItemlevel_north.sql -> tab RAWItemlevel. Item-level open variance, top 200 items per store, with NEG / probable locations and
+-- audit proof: audit decrement / increment quantities and dates (storeops.inventory_update_log, quantity column delta_qty and event
+-- INV_AUDIT_INC confirmed in Redash on 21 Oct 2026). With these the app prioritises T-1 / T-3 / T-7 negatives and counts an item as
+-- FOUND when an audit increment lands after the plan. Edit only the `scope` block. Refresh daily before 10:00 IST.
+with
+-- >>> STORES: the one list to edit (same list in every query). Today: our 51 stores.
 scope (outlet_id) as (
-  values 4073, 4074, 4071, 3577, 3171, 5040, 5401, 4935, 4933, 6016, 6018, 6342, 6474, 7076, 6826, 7251, 7160, 7701, 7690, 8261, 7972, 8058, 8505, 8436, 8554, 8453, 8461, 7978, 4777, 4745, 4825, 6187, 6462, 6719, 6471, 6506, 7162, 7159, 6910, 7779, 7877, 8191, 8408, 8119, 8490, 8681, 8896, 8845, 8910, 8913, 8834,
-    7184, 6406, 4823, 7476, 3432, 7204, 8468, 8211
+  values 4073, 4074, 4071, 3577, 3171, 5040, 5401, 4935, 4933, 6016, 6018, 6342, 6474, 7076, 6826, 7251, 7160, 7701, 7690, 8261, 7972, 8058, 8505, 8436, 8554, 8453, 8461, 7978, 4777, 4745, 4825, 6187, 6462, 6719, 6471, 6506, 7162, 7159, 6910, 7779, 7877, 8191, 8408, 8119, 8490, 8681, 8896, 8845, 8910, 8913, 8834
 ),
 bounds as (
   select date_trunc('month', current_date - interval '1' day) as lo,
@@ -65,19 +65,23 @@ location as (
     and a.site_id in (select cast(outlet_id as varchar) from region_outlets)
     and ia.item_id in (select cast(item_id as varchar) from ranked_capped)
     and ia.location_id is not null
-    and ia.location_id not in ('INTERIM_LOCATION', 'DAMAGED_LOCATION')                            -- CHANGED
+    and ia.location_id not in ('INTERIM_LOCATION', 'DAMAGED_LOCATION')
   group by 1, 2
 ),
 iul_base as (
-  select l.site_id, l.item_id, array_agg(distinct l.loc_id order by l.loc_id) as neg_loc_array
+  select l.site_id, l.item_id,
+         array_agg(distinct case when l.event_name = 'INV_AUDIT_DEC' and l.loc_id <> 'DAMAGED_LOCATION' then l.loc_id end) filter (where l.event_name = 'INV_AUDIT_DEC' and l.loc_id <> 'DAMAGED_LOCATION') as neg_loc_array,
+         sum(case when l.event_name = 'INV_AUDIT_DEC' then abs(l.delta_qty) else 0 end) as audit_decrement_qty,
+         sum(case when l.event_name = 'INV_AUDIT_INC' then abs(l.delta_qty) else 0 end) as audit_increment_qty,
+         array_agg(distinct substr(l.insert_ds_ist, 1, 10)) filter (where l.event_name = 'INV_AUDIT_DEC') as audit_decrement_dates,
+         array_agg(distinct substr(l.insert_ds_ist, 1, 10)) filter (where l.event_name = 'INV_AUDIT_INC') as audit_increment_dates
   from storeops.inventory_update_log l
   cross join bounds b
   where l.insert_ds_ist >= cast(b.lo as varchar)
     and l.insert_ds_ist < cast(b.hi as varchar)
-    and l.event_name in ('INV_AUDIT_DEC')
+    and l.event_name in ('INV_AUDIT_DEC', 'INV_AUDIT_INC')
     and l.site_id in (select cast(outlet_id as varchar) from region_outlets)
     and l.item_id in (select cast(item_id as varchar) from ranked_capped)
-    and l.loc_id <> 'DAMAGED_LOCATION'
   group by 1, 2
 )
 select
@@ -85,8 +89,12 @@ select
   rc.variance, rc.variance_qty, rc.rnk,
   ib.neg_loc_array,
   lo.location_array as probable_locations,
+  coalesce(ib.audit_decrement_qty, 0) as audit_decrement_qty,
+  coalesce(ib.audit_increment_qty, 0) as audit_increment_qty,
+  ib.audit_decrement_dates,
+  ib.audit_increment_dates,
   format_datetime(current_timestamp, 'yyyy-MM-dd HH:mm:ss') as raw_synced_at
-from ranked_capped rc                                                                               -- CHANGED: was `ranked`
+from ranked_capped rc
 left join location lo on lo.site_id = cast(rc.outlet_id as varchar) and lo.item_id = cast(rc.item_id as varchar)
 left join iul_base ib on ib.site_id = cast(rc.outlet_id as varchar) and ib.item_id = cast(rc.item_id as varchar)
 order by rc.outlet_name, rc.rnk

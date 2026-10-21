@@ -1,5 +1,11 @@
 # Recovery Engine v3: set up for every North store (no coding needed)
 
+> **Update 21 Oct (evening):** Parth's queries are no longer needed. Six of our own queries read the warehouse directly
+> (`AUDIT_SESSIONS_north`, `AUDITOR_DAILY_north`, `ROSTER_north`, `LOCATION_RACKS_north`, `RAWItemlevel_north`, `STORE_VARIANCE_DAILY`),
+> and the app syncs them itself every hour or day once their Redash ids are in the **SYNC** tab (menu: Connect Redash → Sync data from Redash now).
+> STORE_HEALTH_RAW stays empty for now (no PPI/TFR source); severity then comes from variance only. Step-by-step: **HANDOFF_CHROME_FINAL.md**.
+
+
 Every file is on the **copy page**, each with a Copy button. Total time: about 90 minutes the first time, most of it in Redash.
 
 | File | Where it goes |

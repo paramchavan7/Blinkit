@@ -102,7 +102,8 @@ function RE_SERVICE_FACTORY(REC) {
   function latestRoster(rows) {
     const by = {};
     rows.forEach(r => { const k = text(r.employee_id) || text(r.captain_id) || text(r.captain_name) || text(r.employee_name); if (!by[k] || text(r.snapshot_date) >= text(by[k].snapshot_date)) by[k] = r; });
-    return Object.keys(by).map(k => by[k]).filter(r => !text(r.designation) || /captain|auditor|associate/i.test(text(r.designation)));
+    // Floor staff only: managers and admin roles are left out (the roster query passes the warehouse role through as designation).
+    return Object.keys(by).map(k => by[k]).filter(r => !/manager|admin|supervisor|\bsm\b|\bcm\b|cluster|city|security/i.test(text(r.designation)));
   }
 
   /** Current plan per outlet: latest confirmed version that nothing supersedes. */

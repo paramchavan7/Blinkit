@@ -38,7 +38,7 @@ Owner: **Param Chavan** (PM). Data and go-ahead: **Parth Saluja**. Training, SOP
 ## Risks
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| Parth's queries are not forkable, or his store list can't be widened in time | Medium | Ask Wed AM. Backup: `LOCATION_RACKS_lite.sql`. The app works with only the 2 required queries; the roster and audits add the crew suggestion |
+| Google's servers can't reach Redash (the built-in sync fails) | Medium | Seen in the first Sync now. Fallback: CSV import per tab; presence is then only right for ~90 min after each import |
 | The Redash → Sheets sync can't push 300k audit rows hourly | Medium | Shorten AUDIT_SESSIONS to today only (change `interval '1' day` to `'0'`). Keep it in the Inputs sheet |
 | SMs on another email domain can't be identified (Execute as Me) | Low–medium | Test one SM per region on Wed. If it fails, switch the deployment to "Execute as user accessing" (tell the owner) |
 | Presence is only as fresh as the hourly audit export | Certain | The UI says "audit data up to HH:MM". The SM always has the final say on the crew |

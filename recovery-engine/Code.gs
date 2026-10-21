@@ -59,11 +59,17 @@ var RE_INPUTS = {
     fill: 'AUDITOR_DAILY_north.sql: audits summed per auditor per day, last 8 days. Refresh hourly or daily.', unlocks: 'Captain IAPH / QAPH / bad-audit % (who is best).'}
 };
 var RE_OWN_H = {
+  SYNC: ['tab', 'redash_query_id', 'refresh', 'max_age_minutes', 'last_synced', 'rows', 'status', 'note'],
   CFG: ['key', 'value', 'default', 'what_it_does'],
   USERS: ['email', 'role', 'outlet_ids', 'regions', 'name', 'note'],
   SOP: ['level', 'step_no', 'step'],
   HEALTH: ['checked_at', 'input', 'source', 'rows', 'outlets', 'latest_date', 'status', 'note']
 };
+// Redash -> input tab sync. Fill redash_query_id in the SYNC tab; rows without an id are left alone (paste those tabs by hand).
+var RE_SYNC_DEFAULT = [
+  ['RAWItemlevel', '', 'daily', 600], ['STORE_VARIANCE_DAILY', '', 'daily', 600], ['EMPLOYEE_CAPACITY_SYNC_RAW', '', 'daily', 600],
+  ['LOCATION_RECOVERY_RAW', '', 'daily', 600], ['AUDIT_EXECUTION_RAW', '', 'hourly', 30], ['AUDITOR_DAILY', '', 'hourly', 30]
+];
 // DRAFT handheld SOP. Rahul's ground documentation replaces these rows in the SOP tab; the app reads the tab, not this list.
 var RE_DEFAULT_SOP = [
   ['LOCATION', 1, 'SM: on HHD create a Location Audit for each listed location and assign it to the captain.'],
@@ -404,6 +410,8 @@ function onOpen() {
     .addItem('2. Check data health', 'RE_HEALTH')
     .addItem('3. Turn on hourly refresh + monitoring', 'RE_INSTALL_TRIGGER')
     .addSeparator()
+    .addItem('Connect Redash (address + API key)', 'RE_CONNECT_REDASH')
+    .addItem('Sync data from Redash now', 'RE_SYNC_NOW')
     .addItem('Refresh all stores now', 'RE_REFRESH')
     .addItem('Send a test alert to me', 'RE_TEST_ALERT')
     .addItem('Archive old log rows now', 'RE_MAINTAIN')
@@ -436,6 +444,8 @@ function RE_SETUP() {
   re_startHere(ss);
   var sop = ss.getSheetByName('SOP');
   if (sop.getLastRow() < 2) sop.getRange(2, 1, RE_DEFAULT_SOP.length, 3).setValues(RE_DEFAULT_SOP);
+  var sync = ss.getSheetByName('SYNC');
+  if (sync.getLastRow() < 2) sync.getRange(2, 1, RE_SYNC_DEFAULT.length, 4).setValues(RE_SYNC_DEFAULT);
   var users = ss.getSheetByName('USERS'), me = Session.getActiveUser().getEmail();
   if (users.getLastRow() < 2 && me) users.appendRow([me.toLowerCase(), 'PM', '', '', '', 'added by setup']);
   return re_alert_('Recovery Engine is set up. Open the START_HERE tab: it lists which query goes into which blue tab.');
@@ -497,11 +507,13 @@ function RE_HEALTH() {
 }
 function RE_INSTALL_TRIGGER() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (['RE_DAILY', 'RE_REFRESH', 'RE_MAINTAIN', 'IRD_DAILY_SNAPSHOT'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
+    if (['RE_DAILY', 'RE_REFRESH', 'RE_MAINTAIN', 'RE_SYNC_HOURLY', 'RE_SYNC_DAILY', 'IRD_DAILY_SNAPSHOT'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('RE_REFRESH').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('RE_SYNC_HOURLY').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('RE_SYNC_DAILY').timeBased().everyDays(1).atHour(8).inTimezone(RE_TZ).create();
   ScriptApp.newTrigger('RE_MAINTAIN').timeBased().everyDays(1).atHour(2).inTimezone(RE_TZ).create();
-  return re_alert_('Hourly refresh (all stores, results, metrics, monitoring alerts) and a nightly 02:00 archive are on.');
+  return re_alert_('On: hourly Redash sync (audit tabs), daily 08:00 Redash sync (other tabs), hourly refresh with monitoring alerts, nightly 02:00 archive.');
 }
 function RE_CLEAR_CACHE() {
   var p = PropertiesService.getScriptProperties();
@@ -536,6 +548,11 @@ function re_alerts(repo, info, err, health, stuck) {
     if ((r[6] === 'EMPTY' || r[6] === 'ERROR') && /required/.test(r[1])) out.push(['input_' + re_norm(r[1]), 12, r[1] + ' is ' + r[6], r[1] + ': ' + r[7]]);
     if (r[1] === 'Spreadsheet size' && r[6] !== 'OK') out.push(['sheet_size_' + re_norm(r[2]), 24, r[2] + ' is almost full', r[2] + ': ' + r[7]]);
   });
+  try {
+    re_rowsOf(re_ss().getSheetByName('SYNC')).forEach(function (r) {
+      if (re_text(r.redash_query_id) && re_text(r.status) === 'ERROR') out.push(['sync_' + re_norm(r.tab), 6, 'Redash sync failed: ' + r.tab, r.tab + ': ' + r.note]);
+    });
+  } catch (e) { /* no SYNC tab yet */ }
   var raw = health.filter(function (r) { return /^RAWItemlevel/.test(r[1]); })[0];
   if (raw && raw[5] && raw[5] < today && hour >= st.feed_due_hour) out.push(['feed_stale_' + today, 24, 'Variance feed not refreshed today', 'RAWItemlevel newest date is ' + raw[5] + '. SMs are planning on yesterday\'s variance.']);
   if (hour >= 8 && hour <= 22) {
@@ -592,6 +609,72 @@ function re_archiveBook() {
   return b;
 }
 
+// ------------------------------------------------------------------ Redash -> input tabs
+/** Asks once for the Redash address and an API key; both are kept in Script Properties (never in a tab). */
+function RE_CONNECT_REDASH() {
+  var ui = SpreadsheetApp.getUi(), p = PropertiesService.getScriptProperties();
+  var u = ui.prompt('Redash address', 'For example https://redash-queries.grofer.io', ui.ButtonSet.OK_CANCEL);
+  if (u.getSelectedButton() !== ui.Button.OK) return 'Cancelled.';
+  var k = ui.prompt('Redash API key', 'Redash > your profile (top right) > API Key. It is stored in this script only.', ui.ButtonSet.OK_CANCEL);
+  if (k.getSelectedButton() !== ui.Button.OK) return 'Cancelled.';
+  p.setProperty('REDASH_URL', re_text(u.getResponseText()).replace(/\/+$/, ''));
+  p.setProperty('REDASH_API_KEY', re_text(k.getResponseText()));
+  return re_alert_('Redash connected. Put each query id in the SYNC tab, then run Sync data from Redash now.');
+}
+function re_redash(path, payload) {
+  var p = PropertiesService.getScriptProperties(), base = p.getProperty('REDASH_URL'), key = p.getProperty('REDASH_API_KEY');
+  if (!base || !key) throw new Error('RE: Redash is not connected. Menu > Connect Redash.');
+  var res = UrlFetchApp.fetch(base + path, {method: payload ? 'post' : 'get', contentType: 'application/json', payload: payload ? JSON.stringify(payload) : undefined,
+    headers: {Authorization: 'Key ' + key}, muteHttpExceptions: true, followRedirects: true});
+  var code = res.getResponseCode(), body = res.getContentText();
+  if (code >= 400) throw new Error('Redash HTTP ' + code + ' on ' + path + ': ' + body.slice(0, 200));
+  try { return JSON.parse(body); } catch (e) { throw new Error('Redash did not answer with JSON on ' + path + ' (login page? check the address and key): ' + body.slice(0, 120)); }
+}
+/** Latest result of a query no older than maxAge seconds; runs it and waits (up to 4 min) when the stored result is older. */
+function re_redashResult(id, maxAge) {
+  var out = re_redash('/api/queries/' + id + '/results', {max_age: maxAge, parameters: {}}), deadline = Date.now() + 240000;
+  while (out.job && !out.query_result) {
+    var job = out.job;
+    if (job.status === 3) { out = re_redash('/api/query_results/' + job.query_result_id); break; }
+    if (job.status === 4 || job.status === 5) throw new Error('query ' + id + ' failed in Redash: ' + (job.error || 'cancelled'));
+    if (Date.now() > deadline) throw new Error('query ' + id + ' still running after 4 minutes');
+    Utilities.sleep(3000);
+    out = re_redash('/api/jobs/' + job.id);
+  }
+  return out.query_result;
+}
+/** Syncs the SYNC rows of one kind ('hourly', 'daily' or 'all') into their input tabs. Each tab is replaced in full; failures are recorded per row. */
+function re_sync(kind) {
+  var ss = re_ss(), st = REC.resolveSettings(re_rowsOf(re_ownTab(ss, 'CFG', RE_OWN_H.CFG))).settings;
+  var book = re_text(st.inputs_sheet_id) ? SpreadsheetApp.openById(st.inputs_sheet_id) : ss, sh = re_ownTab(ss, 'SYNC', RE_OWN_H.SYNC), done = [];
+  var now = function () { return Utilities.formatDate(new Date(), RE_TZ, 'yyyy-MM-dd HH:mm:ss'); };
+  re_rowsOf(sh).forEach(function (r) {
+    var id = re_text(r.redash_query_id), when = re_text(r.refresh).toLowerCase() || 'daily';
+    if (!id || (kind !== 'all' && when !== kind)) return;
+    var t0 = Date.now(), status = 'OK', note = '', n = 0;
+    try {
+      var qr = re_redashResult(id, Math.max(0, Number(r.max_age_minutes) || 30) * 60), cols = qr.data.columns.map(function (c) { return c.name; });
+      var vals = [cols].concat(qr.data.rows.map(function (row) { return cols.map(function (c) { var v = row[c]; return v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : v; }); }));
+      var tab = book.getSheetByName(re_text(r.tab)) || book.insertSheet(re_text(r.tab));
+      if (tab.getMaxRows() < vals.length) tab.insertRowsAfter(tab.getMaxRows(), vals.length - tab.getMaxRows());
+      if (tab.getMaxColumns() < cols.length) tab.insertColumnsAfter(tab.getMaxColumns(), cols.length - tab.getMaxColumns());
+      tab.clearContents();
+      tab.getRange(1, 1, vals.length, cols.length).setValues(vals);
+      if (tab.getMaxRows() > vals.length + 50) tab.deleteRows(vals.length + 51, tab.getMaxRows() - vals.length - 50);   // keeps the sheet under the cell limit
+      n = vals.length - 1;
+      note = 'Redash result ' + qr.retrieved_at + ' · ' + Math.round((Date.now() - t0) / 1000) + ' s';
+    } catch (e) { status = 'ERROR'; note = String(e && e.message || e).slice(0, 300); }
+    sh.getRange(r._row, 5, 1, 4).setValues([[now(), n, status, note]]);
+    done.push(r.tab + ' ' + status);
+  });
+  var p = PropertiesService.getScriptProperties();
+  p.setProperty('RE_CACHE_V', String(Number(p.getProperty('RE_CACHE_V') || 0) + 1));
+  return done.length ? done.join(' | ') : 'Nothing to sync: no redash_query_id for "' + kind + '" rows in the SYNC tab.';
+}
+function RE_SYNC_HOURLY() { return re_sync('hourly'); }
+function RE_SYNC_DAILY() { return re_sync('daily'); }
+function RE_SYNC_NOW() { return re_alert_(re_sync('all')); }
+
 // ------------------------------------------------------------------ web app (called by the App page)
 /** Every call is wrapped: failures are logged to ACTION_LOG ([user] = a message for the person, [system] = a bug or outage). */
 function re_api(name, fn) {
@@ -619,6 +702,7 @@ function RE_MONITOR() {
   return re_api('RE_MONITOR', function () {
     var m = re_svc().monitor(re_repo());
     m.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
+    m.sync = re_rowsOf(re_ss().getSheetByName('SYNC')).map(function (r) { return {tab: r.tab, query: r.redash_query_id, refresh: r.refresh, last: r.last_synced, rows: r.rows, status: r.status, note: r.note}; });
     return m;
   });
 }

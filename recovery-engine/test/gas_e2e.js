@@ -115,10 +115,36 @@ g.call('RE_REFRESH');
 assert.strictEqual(g.mails.filter(m => /Variance feed not refreshed/.test(m.subject)).length, 1, 'same alert not repeated');
 console.log('  alerts sent:', g.mails.map(m => m.subject).join(' | '));
 
+// Redash sync: two queries with ids in the SYNC tab, one failing; results land in the input tabs, failures are recorded and alerted
+const toRedash = rows => ({columns: Object.keys(rows[0]).map(n => ({name: n})), rows});
+g.props.REDASH_URL = 'https://redash.test'; g.props.REDASH_API_KEY = 'k1';
+const syncTab = ss.getSheetByName('SYNC');
+same(g.tab(ss, 'SYNC').map(r => r.tab), ['RAWItemlevel', 'STORE_VARIANCE_DAILY', 'EMPLOYEE_CAPACITY_SYNC_RAW', 'LOCATION_RECOVERY_RAW', 'AUDIT_EXECUTION_RAW', 'AUDITOR_DAILY']);
+syncTab.getRange(6, 2).setValue('701');   // AUDIT_EXECUTION_RAW
+syncTab.getRange(7, 2).setValue('702');   // AUDITOR_DAILY (fails)
+const gs = require('./gas_sim.js');
+const fewer = inputs.AUDIT_EXECUTION_RAW.slice(0, 50);
+const redash = {key: 'k1', queries: {701: toRedash(fewer), 702: 'fail'}};
+g.ctx.UrlFetchApp.fetch = gs({redash}).ctx.UrlFetchApp.fetch;   // a Redash that knows queries 701 and 702
+step(g.call('RE_SYNC_HOURLY'));
+const syncRows = g.tab(ss, 'SYNC');
+assert.strictEqual(syncRows[4].status, 'OK');
+assert.strictEqual(Number(syncRows[4].rows), 50);
+assert.strictEqual(syncRows[5].status, 'ERROR');
+assert.strictEqual(g.tab(ss, 'AUDIT_EXECUTION_RAW').length, 50, 'tab replaced by the Redash result');
+g.advance(60 * 60000);
+g.call('RE_REFRESH');
+assert.ok(g.mails.some(m => /Redash sync failed: AUDITOR_DAILY/.test(m.subject)), 'sync failure alerted');
+const mon2 = g.call('RE_MONITOR');
+assert.ok(mon2.sync.length === 6 && mon2.sync[5].status === 'ERROR');
+g.props.REDASH_API_KEY = 'wrong';
+g.call('RE_SYNC_HOURLY');
+assert.ok(/HTTP 403/.test(g.tab(ss, 'SYNC')[4].note), 'bad key reported per row');
+
 // Triggers, archive, web page
 g.ui(true);
 step(g.call('RE_INSTALL_TRIGGER'));
-same(g.triggers.map(t => t.getHandlerFunction()).sort(), ['RE_MAINTAIN', 'RE_REFRESH']);
+same(g.triggers.map(t => t.getHandlerFunction()).sort(), ['RE_MAINTAIN', 'RE_REFRESH', 'RE_SYNC_DAILY', 'RE_SYNC_HOURLY']);
 g.call('RE_SETTINGS_SAVE', {archive_after_rows: '5'});
 step(g.call('RE_MAINTAIN'));
 assert.ok(g.props.RE_ARCHIVE_ID && g.tab(ss, 'ACTION_LOG').length <= 5);
