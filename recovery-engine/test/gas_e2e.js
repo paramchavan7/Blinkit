@@ -119,32 +119,45 @@ console.log('  alerts sent:', g.mails.map(m => m.subject).join(' | '));
 const toRedash = rows => ({columns: Object.keys(rows[0]).map(n => ({name: n})), rows});
 g.props.REDASH_URL = 'https://redash.test'; g.props.REDASH_API_KEY = 'k1';
 const syncTab = ss.getSheetByName('SYNC');
-same(g.tab(ss, 'SYNC').map(r => r.tab), ['RAWItemlevel', 'STORE_VARIANCE_DAILY', 'EMPLOYEE_CAPACITY_SYNC_RAW', 'LOCATION_RECOVERY_RAW', 'AUDIT_EXECUTION_RAW', 'AUDITOR_DAILY', 'STORE_HEALTH_RAW']);
-syncTab.getRange(6, 2).setValue('701');   // AUDIT_EXECUTION_RAW
-syncTab.getRange(7, 2).setValue('702');   // AUDITOR_DAILY (fails)
+const syncNames = g.tab(ss, 'SYNC').map(r => r.tab);
+same(syncNames, ['RAWItemlevel', 'STORE_VARIANCE_DAILY', 'EMPLOYEE_CAPACITY_SYNC_RAW', 'LOCATION_RECOVERY_RAW', 'AUDIT_EXECUTION_RAW', 'FLOOR_NOW', 'AUDITOR_DAILY', 'STORE_HEALTH_RAW', 'STORE_MASTER', 'USERS_AUTO']);
+const rowOf = t => syncNames.indexOf(t) + 2;
+syncTab.getRange(rowOf('AUDIT_EXECUTION_RAW'), 2).setValue('701');
+syncTab.getRange(rowOf('FLOOR_NOW'), 2).setValue('702');      // fails in Redash
+syncTab.getRange(rowOf('USERS_AUTO'), 2).setValue('703');     // auto users from the North master
 const gs = require('./gas_sim.js');
 const fewer = inputs.AUDIT_EXECUTION_RAW.slice(0, 50);
-const redash = {key: 'k1', queries: {701: toRedash(fewer), 702: 'fail'}};
-g.ctx.UrlFetchApp.fetch = gs({redash}).ctx.UrlFetchApp.fetch;   // a Redash that knows queries 701 and 702
+const auto = [{email: 'cm.auto@grofers.com', role: 'CM', outlet_ids: '8468,8211', regions: '', name: 'CM Auto', note: 'north master'},
+  {email: 'sm.7184@grofers.com', role: 'SM', outlet_ids: '6406', regions: '', name: 'should lose to USERS', note: ''}];
+const redash = {key: 'k1', queries: {701: toRedash(fewer), 702: 'fail', 703: toRedash(auto)}};
+g.ctx.UrlFetchApp.fetch = gs({redash}).ctx.UrlFetchApp.fetch;   // a Redash that knows queries 701-703
 step(g.call('RE_SYNC_HOURLY'));
-const syncRows = g.tab(ss, 'SYNC');
-assert.strictEqual(syncRows[4].status, 'OK');
-assert.strictEqual(Number(syncRows[4].rows), 50);
-assert.strictEqual(syncRows[5].status, 'ERROR');
-assert.strictEqual(g.tab(ss, 'AUDIT_EXECUTION_RAW').length, 50, 'tab replaced by the Redash result');
+let syncRows = g.tab(ss, 'SYNC');
+assert.strictEqual(syncRows[rowOf('AUDIT_EXECUTION_RAW') - 2].status, 'OK');
+assert.strictEqual(Number(syncRows[rowOf('AUDIT_EXECUTION_RAW') - 2].rows), 50);
+assert.strictEqual(syncRows[rowOf('FLOOR_NOW') - 2].status, 'ERROR');
+assert.strictEqual(g.tab(ss, 'AUDIT_EXECUTION_RAW').length, 50, 'tab replaced by the Redash result (CSV download)');
+step(g.call('RE_SYNC_DAILY'));
+assert.strictEqual(g.tab(ss, 'USERS_AUTO').length, 2, 'USERS_AUTO written to the app sheet');
+g.as('cm.auto@grofers.com');
+assert.strictEqual(g.call('RE_CM').rows.length, 2, 'auto-listed CM sees their 2 stores');
+g.as('sm.7184@grofers.com');
+same(g.call('RE_BOOT').stores.map(s2 => s2.outlet_id), ['7184'], 'typed USERS row wins over the synced one');
+g.as('param.chavan@grofers.com');
+assert.ok(/already done today|Nothing to sync/.test(g.call('RE_SYNC_DAILY')), 'daily rows synced OK today are skipped');
 g.advance(60 * 60000);
 g.call('RE_REFRESH');
-assert.ok(g.mails.some(m => /Redash sync failed: AUDITOR_DAILY/.test(m.subject)), 'sync failure alerted');
+assert.ok(g.mails.some(m => /Redash sync failed: FLOOR_NOW/.test(m.subject)), 'sync failure alerted');
 const mon2 = g.call('RE_MONITOR');
-assert.ok(mon2.sync.length === 7 && mon2.sync[5].status === 'ERROR');
+assert.ok(mon2.sync.length === 10 && mon2.sync[rowOf('FLOOR_NOW') - 2].status === 'ERROR');
 g.props.REDASH_API_KEY = 'wrong';
 g.call('RE_SYNC_HOURLY');
-assert.ok(/HTTP 403/.test(g.tab(ss, 'SYNC')[4].note), 'bad key reported per row');
+assert.ok(/HTTP 403/.test(g.tab(ss, 'SYNC')[rowOf('AUDIT_EXECUTION_RAW') - 2].note), 'bad key reported per row');
 
 // Triggers, archive, web page
 g.ui(true);
 step(g.call('RE_INSTALL_TRIGGER'));
-same(g.triggers.map(t => t.getHandlerFunction()).sort(), ['RE_MAINTAIN', 'RE_REFRESH', 'RE_SYNC_DAILY', 'RE_SYNC_HOURLY']);
+same(g.triggers.map(t => t.getHandlerFunction()).sort(), ['RE_MAINTAIN', 'RE_REFRESH', 'RE_SYNC_DAILY', 'RE_SYNC_DAILY', 'RE_SYNC_DAILY', 'RE_SYNC_HOURLY']);
 g.call('RE_SETTINGS_SAVE', {archive_after_rows: '5'});
 step(g.call('RE_MAINTAIN'));
 assert.ok(g.props.RE_ARCHIVE_ID && g.tab(ss, 'ACTION_LOG').length <= 5);

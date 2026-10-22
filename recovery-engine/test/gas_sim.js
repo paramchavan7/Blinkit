@@ -147,7 +147,12 @@ function makeGas(opts) {
       ungzip: b => new Blob(zlib.gunzipSync(b.buf), 'application/octet-stream'),
       base64Encode: bytes => fromBytes(bytes).toString('base64'),
       base64Decode: s => toBytes(Buffer.from(s, 'base64')),
-      sleep: () => {}
+      sleep: () => {},
+      parseCsv: text => { const rows = []; let row = [], f = '', q = false;
+        for (let i = 0; i < text.length; i++) { const c = text[i];
+          if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+          else if (c === '"') q = true; else if (c === ',') { row.push(f); f = ''; } else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; } else f += c; }
+        if (f || row.length) { row.push(f); rows.push(row); } return rows; }
     },
     PropertiesService: {getScriptProperties: () => ({getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { if (String(v).length > 9000) throw new Error('Property value too large'); props[k] = String(v); }, deleteProperty: k => { delete props[k]; }})},
     CacheService: {getScriptCache: () => ({
@@ -172,6 +177,9 @@ function makeGas(opts) {
       if (m) { const q = R.queries[m[1]]; if (!q) return reply(404, {message: 'Query not found'}); return reply(200, {job: {id: 'job-' + m[1], status: 1}}); }
       m = /\/api\/jobs\/job-(\w+)$/.exec(url);
       if (m) { const q = R.queries[m[1]]; return reply(200, {job: q === 'fail' ? {id: 'job-' + m[1], status: 4, error: 'Query failed: table not found'} : {id: 'job-' + m[1], status: 3, query_result_id: 'r' + m[1]}}); }
+      m = /\/api\/query_results\/r(\w+)\.csv$/.exec(url);
+      if (m) { const d = R.queries[m[1]], cols = d.columns.map(c => c.name), q = v => { const x = v === null || v === undefined ? '' : String(v); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+        return reply(200, [cols.join(',')].concat(d.rows.map(r => cols.map(c => q(r[c])).join(','))).join('\n')); }
       m = /\/api\/query_results\/r(\w+)$/.exec(url);
       if (m) return reply(200, {query_result: {id: 'r' + m[1], retrieved_at: '2026-10-21T10:00:00', data: R.queries[m[1]]}});
       return reply(404, 'not found');

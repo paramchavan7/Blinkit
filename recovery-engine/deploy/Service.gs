@@ -133,15 +133,15 @@ function RE_SERVICE_FACTORY(REC) {
   // ------------------------------------------------------------------ inputs
   /** All inputs once, grouped by outlet (refresh job). */
   function readAll(repo) {
-    return {raw: group(repo.raw()), locs: group(repo.locations()), sessions: group(repo.audits()), dailies: group(repo.auditorDaily()), caps: group(repo.captains()),
+    return {raw: group(repo.raw()), locs: group(repo.locations()), sessions: group(repo.audits()), dailies: group(repo.auditorDaily()), floor: group(repo.floorNow ? repo.floorNow() : []), caps: group(repo.captains()),
       metrics: group(repo.storeMetrics()), variance: group(repo.storeVariance()), cohort: index(repo.health(), 'outlet_id'), snaps: group(repo.rows('DAILY'))};
   }
-  const slice = (G, id) => ({raw: G.raw[id] || [], locs: G.locs[id] || [], sessions: G.sessions[id] || [], dailies: G.dailies[id] || [], caps: G.caps[id] || [],
+  const slice = (G, id) => ({raw: G.raw[id] || [], locs: G.locs[id] || [], sessions: G.sessions[id] || [], dailies: G.dailies[id] || [], floor: G.floor[id] || [], caps: G.caps[id] || [],
     metrics: G.metrics[id] || [], variance: G.variance[id] || [], cohort: G.cohort[id] || null, snaps: G.snaps[id] || []});
   /** One store's inputs without the job (first use, tests). Reads whole input tabs: fine for a pilot, slow at North scale. */
   function sliceLive(repo, id) {
     const f = rows => (rows || []).filter(r => text(r.outlet_id) === text(id));
-    return {raw: f(repo.raw()), locs: f(repo.locations()), sessions: f(repo.audits()), dailies: f(repo.auditorDaily()), caps: f(repo.captains()), metrics: f(repo.storeMetrics()),
+    return {raw: f(repo.raw()), locs: f(repo.locations()), sessions: f(repo.audits()), dailies: f(repo.auditorDaily()), floor: f(repo.floorNow ? repo.floorNow() : []), caps: f(repo.captains()), metrics: f(repo.storeMetrics()),
       variance: f(repo.storeVariance()), cohort: index(repo.health(), 'outlet_id')[text(id)] || null, snaps: f(repo.rows('DAILY'))};
   }
 
@@ -153,11 +153,13 @@ function RE_SERVICE_FACTORY(REC) {
     if (!text(h.open_variance_3m)) { const v = REC.varianceHistory(D.variance, id, c.today, st); if (v) Object.assign(h, v); }
     const sev = REC.severity(wl.summary, h, st, REC.storeMetrics(D.metrics, id, st));
     const metrics = REC.auditMetrics(D.dailies.length ? D.dailies : D.sessions, id, c.today, st);
-    const pres = REC.presence(D.sessions.concat(D.dailies), id, now, st);
+    const pres = REC.presence(D.sessions.concat(D.dailies, D.floor || []), id, now, st);
     const rows = latestRoster(D.caps), known = {};
     rows.forEach(r => { known[text(r.employee_id) || text(r.captain_id)] = true; });
     // Auditors who audited today but are missing from the roster export still show up (named from the audit export).
-    Object.keys(pres).forEach(aid => { if (!known[aid]) rows.push({outlet_id: id, employee_id: aid, employee_name: pres[aid].name || aid, designation: 'Auditor (seen in today\'s audits)'}); });
+    const floorRole = {};
+    (D.floor || []).forEach(f => { floorRole[text(f.auditor_id)] = text(f.designation); });
+    Object.keys(pres).forEach(aid => { if (!known[aid]) rows.push({outlet_id: id, employee_id: aid, employee_name: pres[aid].name || aid, designation: floorRole[aid] || 'Auditor (seen today)'}); });
     const roster = REC.rankCaptains(REC.withAuditMetrics(rows, metrics), st, lastCrew || [], pres);
     const sugg = REC.suggest(diag, roster, st);
     const latest = Object.keys(pres).reduce((v, k) => Math.max(v, pres[k].last_ms), 0);

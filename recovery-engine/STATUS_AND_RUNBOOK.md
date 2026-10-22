@@ -1,5 +1,24 @@
 # Recovery Engine: what runs, what's missing, and the 2-hour go-live (22 Oct 2026)
 
+## Part 0. Reconciled with Claude in Chrome's list (22 Oct, after Param's North master query)
+| Point | Claude in Chrome said | Now |
+|---|---|---|
+| Scope | 51 fixed IDs; your UPW + UK master has 127 | **Closed.** Every query takes its stores from your North city list (6 regions). The `where region in (...)` line in each query switches regions on and off |
+| STORE_MASTER regions / CMs | Empty tab, CM scoping broken, "Dehradhun" as a region | **Closed.** `STORE_MASTER_north.sql` (region, city, CM as cluster, SM, MISSING_CM / SM flags), synced daily |
+| USERS | Only PMs; no SM / CM can log in | **Closed.** `USERS_north.sql` → USERS_AUTO (every SM / ASM / senior SM / CM / ops head / city admin with an email), synced daily. USERS stays for overrides |
+| "Who is at the store now" | Audits in the last 90 minutes only | **Improved.** `FLOOR_NOW_north.sql`: open shifts (ops_management.shift) + anyone working today, hourly. On shift = on the floor |
+| Store health | Off, so 0 BROKEN | **Partly closed.** Store PPI (picking) is live; TFR / R2A / surge still have no source |
+| Eligible auditor pool (`complex_approved`) | No flag in user_details | **Closed by setting.** CFG `complex_approved_ids`: paste Parth's employee IDs |
+| High-value SKU audits on top | Not in ranking | **Built.** Missing units worth ≥ ₹10,000 each rank first (HV). CFG `high_value_unit_rs` (0 = off) |
+| Charter state names (BROKEN / DETERIORATING / CHRONIC / CLEAN) | App uses SEVERELY_BROKEN / BROKEN / AT_RISK / SORTED | **Open: your decision** (asked) |
+| Severity ₹ lines (₹1.5L pending, ₹4L open) | Placeholders | **Open: you + Parth**, 2 CFG cells |
+| Parth's V2 draft / review flow | Replaced, not ported | Show the swap in the demo |
+| Side-by-side vs Parth's plan preview | Not done | Before the demo: 1 store |
+| C's month-on-month by CM | Not in v3 | Next build |
+| API key | Claude in Chrome may not enter it | **You** type it into "Connect Redash" |
+| Sync time at 127+ stores | May pass 4 minutes | CSV download, today-only sessions, 20k-row writes, Redash schedules + `max_age_minutes`, and three daily sync runs that each continue where the last one stopped |
+
+
 ## Part 1. What we are running
 
 ### 1A. The Apps Script project (the base: what actually runs)
@@ -27,18 +46,19 @@ One Apps Script project, **bound to the app Google Sheet**. Live today as the Gr
 | **Recovery Engine Archive** | created automatically on the first nightly archive | Old PLAN_TASKS, PLAN_ITEMS, ACTION_LOG and JOB_RUNS rows |
 | Printable captain sheets | one new Google Sheet per plan, in Drive (`export_folder_id`) | One A4 tab per captain + a PDF link |
 
-### 1C. The Redash queries (Redash https://redash-queries.grofer.io, data source [Warehouse] Trino)
-All of them read the warehouse directly. None depends on Parth's queries. Each has one `scope` block, the store list.
-
-| Query (copy-page card) | Tab | Sync | Feeds |
+### 1C. The Redash queries (Redash https://redash-queries.grofer.io, [Warehouse] Trino): 10, all scoped by the North city list
+| Query | Tab | Sync | Feeds |
 |---|---|---|---|
-| `RAWItemlevel_north.sql` | RAWItemlevel | daily | Item variance, NEG / probable locations, audit increment / decrement proof (**required**) |
-| `STORE_VARIANCE_DAILY.sql` | STORE_VARIANCE_DAILY | daily | Store severity: 90-day open and 60-day net variance (**required**) |
-| `AUDIT_SESSIONS_north.sql` | AUDIT_EXECUTION_RAW | **hourly** | Who is on the floor now; audit evidence per planned location |
-| `AUDITOR_DAILY_north.sql` | AUDITOR_DAILY | **hourly** | Captain IAPH / QAPH / bad-audit %, plus anyone working today |
-| `ROSTER_north.sql` | EMPLOYEE_CAPACITY_SYNC_RAW | daily | Captain list, names, roles, worked yesterday |
-| `LOCATION_RACKS_north.sql` | LOCATION_RECOVERY_RAW | daily | Real rack sizes and the correction-days part of Parth's full-rack rule |
-| `STORE_HEALTH_north.sql` | STORE_HEALTH_RAW | daily | Store PPI, the PPI half of Parth's LiveHealth rule (new) |
+| `STORE_MASTER_north.sql` | STORE_MASTER (Inputs) | daily | Which stores are live: region, city, CM (cluster), SM |
+| `USERS_north.sql` | USERS_AUTO (app sheet) | daily | Who can log in: SM → own stores; CM / ops head / city admin → their stores |
+| `FLOOR_NOW_north.sql` | FLOOR_NOW | **hourly** | Who is at the store now: open shifts + anyone working today |
+| `AUDIT_SESSIONS_north.sql` | AUDIT_EXECUTION_RAW | **hourly** | Today's location audits: evidence per planned location |
+| `AUDITOR_DAILY_north.sql` | AUDITOR_DAILY | daily | Captain IAPH / QAPH / bad-audit %, last 8 days |
+| `ROSTER_north.sql` | EMPLOYEE_CAPACITY_SYNC_RAW | daily | Captain list with names and designations; worked yesterday |
+| `LOCATION_RACKS_north.sql` | LOCATION_RECOVERY_RAW | daily | Rack sizes and correction days (Parth's full-rack rule) |
+| `RAWItemlevel_north.sql` | RAWItemlevel | daily | Item variance, locations, audit increment / decrement proof (**required**) |
+| `STORE_VARIANCE_DAILY.sql` | STORE_VARIANCE_DAILY | daily | 90-day open / 60-day net variance (**required**) |
+| `STORE_HEALTH_north.sql` | STORE_HEALTH_RAW | daily | Store PPI |
 
 ### 1D. What we took from each file you uploaded
 | Your file | What the build uses from it | Status |
@@ -83,11 +103,11 @@ Grouped by what it serves: Parth's expectations, your vision, your charter.
 
 | Time | Step | Who | Done when |
 |---|---|---|---|
-| **0:00–0:10** | Send me / Claude in Chrome the **North store list** (Part 3, item 1), or say "North = our 51 for today" | **You** | List received |
-| 0:00–0:15 | Apps Script: replace **Code, Engine, Service, App** from the copy page → save → menu **1. Set up / repair tabs** (approve "connect to external service") | Chrome; you approve | END lines OK; SYNC tab has 7 rows |
-| 0:15–0:50 | Redash: create the **7 queries** (cards 6–12) on [Warehouse] Trino. In each, paste the North IDs into `scope`. Run, check rows, save as `RE · …`, note the ids | Chrome | 7 query ids; checks noted |
-| 0:50–1:00 | CFG `inputs_sheet_id` = `1csiQryJ…` → Set up again → menu **Connect Redash** (you paste your Redash API key) → put the 7 ids in SYNC → **Sync data from Redash now** | Chrome; **you paste the key** | Every SYNC row OK |
-| 1:00–1:15 | **STORE_MASTER** (Inputs sheet): North rows with region, cluster, cm_sm. **USERS** (app sheet): SM and CM rows | Chrome, from your lists | HEALTH: required rows OK |
+| **0:00–0:05** | Answer the 4 questions (regions, access, state names, high-value) | **You** | Answers sent |
+| 0:00–0:15 | Apps Script: replace **Code, Engine, Service, App** from the copy page → save → menu **1. Set up / repair tabs** (approve "connect to external service") | Chrome; you approve | END lines OK; SYNC tab has 10 rows |
+| 0:15–0:50 | Redash: create the **10 queries** on [Warehouse] Trino. They pick the North stores themselves. Run, check rows, save as `RE · …`, note the ids | Chrome | 10 query ids; checks noted |
+| 0:50–1:00 | CFG `inputs_sheet_id` = `1csiQryJ…` → Set up again → menu **Connect Redash** (you paste your Redash API key) → put the 10 ids in SYNC → **Sync data from Redash now** | Chrome; **you paste the key** | Every SYNC row OK |
+| 1:00–1:15 | Check STORE_MASTER and USERS_AUTO were synced (stores per region, SM / CM counts). Add Parth and Rahul to USERS as PM | Chrome | HEALTH: required rows OK |
 | 1:15–1:30 | Menu **Refresh all stores now** → **3. Turn on hourly refresh + monitoring** → **Send a test alert** | Chrome | JOB_RUNS OK; 6 triggers; email received |
 | 1:30–1:40 | Check one AT_RISK store: crew chips with real names "On floor · HH:MM", Racks with most variance | Chrome | Done criterion 1 met |
 | 1:40–1:50 | **Deploy → New deployment → Web app** (Execute as Me, anyone in org) | **You approve** | Web app URL |
@@ -102,25 +122,25 @@ Until then, "on the floor now" is right only for about 90 minutes after each imp
 ---
 
 ## Part 3. What I still need from you
-**Blocking (needed in the next 2 hours):**
-1. **The North store list.** Outlet IDs, plus region, cluster and CM name per store.
-   - Or tell Claude in Chrome to run `NORTH_OUTLETS.sql` and filter to the North cities with you.
-   - Or say "our 51 for today" and extend tomorrow.
-2. **People.** Each SM's work email + store ID, and each CM's email + their regions or store IDs. A sheet export is fine.
-3. **Approvals during the run:**
-   - Google permission screens;
-   - pasting your Redash API key into the "Connect Redash" prompt (it stays in the script, never in a tab or chat);
-   - the web-app deploy;
-   - sharing the link.
+**Blocking (next 2 hours):**
+1. **Answers to the 4 questions in chat:**
+   - live regions;
+   - who gets automatic access;
+   - state names;
+   - the high-value rule.
+2. **Approvals during the run:**
+   - the Google permission screen ("connect to an external service");
+   - **typing your Redash API key** into "Connect Redash";
+   - the Deploy click;
+   - asking 1 SM and 1 CM to open the link.
 
-**Needed this week (not blocking today):**
+**Needed this week (not blocking):**
 
-4. **Parth (Thursday demo):**
-   - the TFR / R2A / surge source (or his DAILY_STORE_HEALTH_SYNC_RAW SQL);
-   - sign-off on the audit quality rule and the severity ₹ thresholds;
-   - a PPI comparison on 3 stores.
-5. **Rahul:** the ground SOP for the SOP tab, and training slots per region (`TRAINING.md`).
-6. **You:**
-   - whether item audits count as captain work;
-   - whether to pull SM item outcomes from C's Recovery_Action;
-   - when to fold the charter dashboard (wastage, complaints, forward / reverse) in.
+3. **Parth:**
+   - TFR / R2A / surge source;
+   - his eligible auditor IDs (paste into CFG `complex_approved_ids`);
+   - sign-off on the audit quality rule and the severity ₹ lines;
+   - a PPI comparison on 3 stores;
+   - a side-by-side with his plan preview for 1 store.
+4. **Rahul:** the ground SOP (SOP tab) and training slots.
+5. **You:** low-order windows per store, if you want them shown (STORE_MASTER `low_order_window`).

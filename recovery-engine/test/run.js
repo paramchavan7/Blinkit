@@ -163,4 +163,12 @@ svc.refresh(repo);
 assert.strictEqual(repo._tables.STORE_STATE.length, 2);
 svc.settingsSave(repo, {live_regions: ''});
 console.log('action log', [...new Set(repo._tables.ACTION_LOG.map(r => r.action))].join(', '));
+// presence: an open shift means "at the store now", even with no recent audit
+const pr = REC.presence([{outlet_id: '1', audit_date_ist: fx.today, auditor_id: 'S1', last_end_time: fx.today + ' 06:00:00', on_shift: '1', sessions: 0},
+  {outlet_id: '1', audit_date_ist: fx.today, auditor_id: 'S2', last_end_time: fx.today + ' 06:00:00', on_shift: '0', sessions: 0}], '1', fx.today + ' 11:00:00', REC.DEFAULTS);
+assert.strictEqual(pr.S1.now, true); assert.strictEqual(pr.S2.now, false);
+// high-value SKUs go to the top
+const hv = REC.worklist([{outlet_id: '1', item_id: 'A', item_name: 'Phone', variance: 24000, variance_qty: 2, rnk: 9, neg_loc_array: '[F0-A01-001-01-A]', probable_locations: '[]'},
+  {outlet_id: '1', item_id: 'B', item_name: 'Milk', variance: 90, variance_qty: 3, rnk: 1, neg_loc_array: '[F0-A01-002-01-A]', probable_locations: '[]'}], '1', REC.DEFAULTS);
+assert.strictEqual(hv.items[0].item_id, 'A'); assert.strictEqual(hv.items[0].priority, 'HV');
 console.log('ALL TESTS PASSED');

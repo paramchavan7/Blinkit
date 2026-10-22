@@ -13,7 +13,7 @@ You are in Param Chavan's Chrome (param.chavan@grofers.com). This picks up from 
 ## Done when (all must be true; report each with its evidence)
 1. Crew chips on at least one AT_RISK store show **real names with "On floor · HH:MM"**, and the suggested crew is ticked.
 2. **Monitoring** shows:
-   - Redash sync OK for the 7 tabs;
+   - Redash sync OK for the 10 tabs;
    - the last refresh OK in the last hour;
    - the triggers RE_REFRESH, RE_SYNC_HOURLY, RE_SYNC_DAILY and RE_MAINTAIN.
 3. **"Racks with most variance"** is visible. **Do first → Confirm → Make printable sheet** works, and the PDF has one page per captain.
@@ -24,7 +24,7 @@ You are in Param Chavan's Chrome (param.chavan@grofers.com). This picks up from 
 - Paste code and SQL only from the copy page. Never edit code. If something fails, copy the exact error text and the file and line, then stop that step.
 - **Param approves** every Google permission screen, the deploy, and sharing with anyone.
 - **Redash API key:** copy it only into the app's "Connect Redash" prompt. Never put it in a report, a chat, a tab or a query.
-- Redash: save the 7 queries below with their names. Never edit or fork anyone else's query.
+- Redash: save the 10 queries below with their names. Never edit or fork anyone else's query.
 - Check every ✔ before moving on.
 
 ---
@@ -41,43 +41,43 @@ Engine.gs also changed: severity now works with PPI alone. Replace all 4 files.
    - ✔ The four END lines are present.
    - ✔ Saving shows no SyntaxError.
 2. In the sheet: **Recovery Engine → 1. Set up / repair tabs** (Param approves the new permission: "connect to an external service", which is for Redash).
-   - ✔ A new **SYNC** tab exists, listing 7 tabs with an empty `redash_query_id`.
+   - ✔ A new **SYNC** tab exists, listing 10 tabs with an empty `redash_query_id`.
 
-## Step 2: Create the 7 queries in Redash (30–40 min)
-**North stores:** in every query, replace the IDs in the `scope` block with the North list Param gives you (the same list in all 7).
-For each card below:
-1. **New Query** → data source **[Warehouse] Trino** → paste → **Execute**.
-2. Check the result against the table. If the check fails, still save, and note it in the report.
-3. **Save** with the given name.
-4. Write down the **query id** (the number in the URL `/queries/<id>`).
+## Step 2: Create the 10 queries in Redash (30–40 min)
+Every query now picks the North stores itself from Param's North city list (the `city_scope` / `north` / `scope` block at the top). Do not paste store IDs.
+**Live regions:** in each query, the `scope` block's `where region in (...)` line lists the regions that are live. Keep all six unless Param says otherwise, and use the same list in all 10.
 
-| Copy-page card | Save as | Check on the result | Goes to tab |
+For each card: **New Query** → data source **[Warehouse] Trino** → paste → **Execute** → check → **Save** as the name below → write down the **id** (`/queries/<id>`).
+
+| Card | Save as | Check on the result | SYNC row |
 |---|---|---|---|
-| `AUDIT_SESSIONS_north.sql` | RE · AUDIT_SESSIONS | Rows for 7877 today > 100. Most sessions are 60–300 s. Note the share of `BELOW_PROVISIONAL_SOP` | AUDIT_EXECUTION_RAW |
-| `AUDITOR_DAILY_north.sql` | RE · AUDITOR_DAILY | Today's rows include people with `sessions = 0` (pickers on the floor). For 7877, about 8–15 auditors on past days | AUDITOR_DAILY |
-| `ROSTER_north.sql` | RE · ROSTER | 30–80 rows per store. **Write down the distinct `designation` values** | EMPLOYEE_CAPACITY_SYNC_RAW |
+| `STORE_MASTER_north.sql` | RE · STORE_MASTER | One row per North store. Count the stores per region. Note the MISSING_CM / MISSING_SM counts | STORE_MASTER |
+| `USERS_north.sql` | RE · USERS | One row per email, with role SM or CM. Count both | USERS_AUTO |
+| `FLOOR_NOW_north.sql` | RE · FLOOR_NOW | Rows with `on_shift = 1` at many stores right now. No Store Managers | FLOOR_NOW (hourly) |
+| `AUDIT_SESSIONS_north.sql` | RE · AUDIT_SESSIONS | Today's sessions. 7877 has > 50 by midday | AUDIT_EXECUTION_RAW (hourly) |
+| `AUDITOR_DAILY_north.sql` | RE · AUDITOR_DAILY | The last 8 days, about 8–15 auditors per store per day | AUDITOR_DAILY |
+| `ROSTER_north.sql` | RE · ROSTER | 30–80 rows per store, with names and designations filled | EMPLOYEE_CAPACITY_SYNC_RAW |
 | `LOCATION_RACKS_north.sql` | RE · LOCATION_RACKS | 150–400 rows per store | LOCATION_RECOVERY_RAW |
 | `RAWItemlevel_north.sql` | RE · RAWItemlevel | At most 200 rows per store. Some rows have `audit_decrement_qty` > 0 | RAWItemlevel |
-| `STORE_VARIANCE_DAILY.sql` | RE · STORE_VARIANCE_DAILY | About 51 stores × 60–90 days | STORE_VARIANCE_DAILY |
+| `STORE_VARIANCE_DAILY.sql` | RE · STORE_VARIANCE_DAILY | Stores × about 60–90 days | STORE_VARIANCE_DAILY |
 | `STORE_HEALTH_north.sql` | RE · STORE_HEALTH | One row per store per day; `ppi` mostly 10–40 s | STORE_HEALTH_RAW |
 
-- **A query that runs longer than 4 minutes** won't sync (the sync waits 4 minutes). Note it. For AUDIT_SESSIONS or AUDITOR_DAILY, also add a Redash schedule (every hour) so the sync reads a stored result.
-- **Optional, faster syncs:** add Redash schedules. Hourly for AUDIT_SESSIONS and AUDITOR_DAILY; daily 07:30 for the other four.
+- Write down each query's **runtime**. Anything over 3 minutes: add a Redash schedule (hourly for FLOOR_NOW and AUDIT_SESSIONS, daily 05:30 for the rest) and set that SYNC row's `max_age_minutes` to 90 (hourly) or 600 (daily), so the sync reads the stored result instead of waiting.
+- If a query errors on a table name (`storeops_etls.user_store_role_mapping`, `ops_management.shift`, `ops_management.user`, `retail.console_location`), copy the exact error and continue with the others.
 
 ## Step 3: Connect the sheet to Redash (10 min)
-1. App sheet **CFG**: `inputs_sheet_id` = `1csiQryJr9_uJFLlh_qSzc-8Xu2ZUq6Wql-wzx3Ui0fo`. Then run **1. Set up / repair tabs**.
-   - ✔ The Inputs sheet has the 9 blue tabs.
-2. Copy the PILOT_COHORT and STORE_MASTER tabs from the app sheet into the Inputs sheet (select all → copy → paste at A1 of the same-named tab). From now on the app reads inputs only from the Inputs sheet.
-   - If STORE_MASTER is empty: build the 51 rows from RE · RAWItemlevel (`outlet_id`, `outlet_name`, `city`). Set `region` from the city (Uttarakhand cities → `Uttarakhand`, the rest → `UP West`) and **ask Param to confirm the regions and fill `cm_sm`**.
-3. Menu **Connect Redash (address + API key)**:
+1. App sheet **CFG**: `inputs_sheet_id` = `1csiQryJr9_uJFLlh_qSzc-8Xu2ZUq6Wql-wzx3Ui0fo` → **1. Set up / repair tabs**.
+   - ✔ The Inputs sheet has the 10 blue tabs, including FLOOR_NOW.
+2. Copy PILOT_COHORT from the app sheet to the Inputs sheet (same tab name, paste at A1). STORE_MASTER now comes from Redash.
+3. **Param:** menu **Connect Redash (address + API key)**:
    - address `https://redash-queries.grofer.io`;
-   - API key from Redash → profile (top right) → **API Key**. Param approves copying it.
-4. **SYNC** tab: put each query id in `redash_query_id` on its tab's row. Keep `refresh` as set: hourly for the two audit tabs, daily for the rest.
+   - API key from Redash → profile → API Key. Param types it; you never handle the key.
+4. **SYNC** tab: put each query id on its row. Keep `refresh` as set: hourly for FLOOR_NOW and AUDIT_EXECUTION_RAW, daily for the rest.
 5. Menu **Sync data from Redash now**.
-   - ✔ Every SYNC row has status **OK** and a row count.
-   - ✔ The Inputs sheet tabs hold the data.
-   - **Error "Redash HTTP 4xx":** wrong key or address. Re-run Connect Redash.
-   - **DNS / "Address unavailable" / a login page:** Google's servers can't reach your Redash. **Stop this step** and report it. Fallback for today: download each result as CSV and use File → Import → Replace current sheet into its tab. Presence will then only be right for about 90 minutes after each import.
+   - ✔ Every SYNC row is OK with a row count.
+   - ✔ USERS_AUTO (app sheet) lists the SMs and CMs.
+   - **"Redash HTTP 4xx":** re-run Connect Redash.
+   - **DNS / "Address unavailable" / a login page:** Google can't reach Redash. Stop, report it, and use the fallback: download each result as CSV and use File → Import → Replace current sheet into its tab.
 
 ## Step 4: Refresh and check the SM view (10 min)
 1. Menu **2. Check data health**.
@@ -92,11 +92,15 @@ For each card below:
    - ✔ "Racks with most variance" lists racks with ₹.
    - **If the crew list is empty or every chip says "Not seen":** report the store id, the AUDITOR_DAILY row count for that store today, and the `designation` values from step 2.
 4. Menu **3. Turn on hourly refresh + monitoring**, then **Send a test alert to me**.
-   - ✔ Monitoring lists the 4 triggers.
+   - ✔ Monitoring lists 6 triggers: RE_REFRESH, RE_SYNC_HOURLY, 3 × RE_SYNC_DAILY, RE_MAINTAIN.
    - ✔ Param receives the test email.
 
 ## Step 5: People, deploy and smoke test (20 min)
-1. **USERS** (app sheet): add the SM and CM rows Param gives you. An SM row has role `SM` and `outlet_ids` set to their store. A CM row has role `CM` and either `regions` (`UP West` / `Uttarakhand`) or `outlet_ids`.
+1. **People come from USERS_AUTO**, synced daily from the store role mapping:
+   - SM / ASM / senior SM → their own stores;
+   - CM / ops head / city admin → all their stores.
+
+   The **USERS** tab is only for overrides and extras (Param, Parth and Rahul as PM). A typed row always wins.
 2. **Deploy → New deployment → Web app**. Execute as **Me**; access **Anyone within the organisation**. Param approves. Copy the URL.
 3. Smoke test on the deployed URL:
    - As Param: Control tower (with today's goodness-metrics row) → Monitoring (sync, refresh and triggers all green).
@@ -115,7 +119,8 @@ For each card below:
 ## Report back (paste this filled in)
 ```
 Code updated (Code/Service/App END lines ok):
-Redash query ids: AUDIT_SESSIONS= AUDITOR_DAILY= ROSTER= LOCATION_RACKS= RAWItemlevel= STORE_VARIANCE_DAILY= STORE_HEALTH=
+Redash query ids: STORE_MASTER= USERS= FLOOR_NOW= AUDIT_SESSIONS= AUDITOR_DAILY= ROSTER= LOCATION_RACKS= RAWItemlevel= STORE_VARIANCE_DAILY= STORE_HEALTH=
+Stores per region / users (SM, CM):
 Query checks (rows, runtime, BELOW share, designation values):
 SYNC statuses (tab: status, rows):
 HEALTH (input: status):

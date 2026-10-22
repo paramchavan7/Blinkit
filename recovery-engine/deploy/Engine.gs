@@ -29,6 +29,7 @@ function RE_CORE_FACTORY() {
     {key:'tab_captains', def:'EMPLOYEE_CAPACITY_SYNC_RAW', type:'text', label:'Tab name for the captain roster'},
     {key:'tab_locations', def:'LOCATION_RECOVERY_RAW', type:'text', label:'Tab name for locations'},
     {key:'tab_audits', def:'AUDIT_EXECUTION_RAW', type:'text', label:'Tab name for audit sessions (today and yesterday at North scale)'},
+    {key:'tab_floor_now', def:'FLOOR_NOW', type:'text', label:'Tab name for who is on shift / working now (hourly)'},
     {key:'tab_auditor_daily', def:'AUDITOR_DAILY', type:'text', label:'Tab name for audits summed per auditor per day (captain ratings at North scale)'},
     {key:'tab_health', def:'PILOT_COHORT', type:'text', label:'Tab name for the pilot cohort'},
     {key:'tab_store_metrics', def:'STORE_HEALTH_RAW', type:'text', label:'Tab name for daily store health (PPI, TFR, R2A, surge)'},
@@ -67,6 +68,8 @@ function RE_CORE_FACTORY() {
     {key:'pilferage_keywords', def:'marlboro,classic ,gold flake,dunhill,cigarette,condom,personal massager,whey,protein powder,creatine,earbuds,tws,smart watch,power bank,trimmer,perfume,eau de,attar,ghee,cashew,almond,pistachio,walnut', type:'list', label:'Item-name words treated as pilferage-prone (used when the feed has no L0)'},
     {key:'min_item_variance', def:20, type:'num', label:'Ignore items with variance ₹ below this (rounding noise)'},
     {key:'high_value_mrp', def:500, type:'num', label:'MRP at or above which an item is pilferage-prone'},
+    {key:'high_value_unit_rs', def:10000, type:'num', label:'Items whose missing units are worth at least this ₹ each go to the top of the worklist (HV). 0 = off'},
+    {key:'complex_approved_ids', def:'', type:'list', label:'Employee IDs approved for rack / aisle sweeps (Parth\'s eligible auditor list). Blank = cleared by bad-audit %'},
     {key:'sev_ppi_target', def:18, type:'num', label:'Severity (Parth LiveHealth): store PPI above this = broken'},
     {key:'sev_tfr_target', def:99.5, type:'num', label:'Severity (Parth LiveHealth): TFR % below this = broken. PPI and TFR both broken = SEVERELY BROKEN'},
     {key:'sev_r2a_target', def:30, type:'num', label:'Capacity (Parth LiveHealth): R2A seconds above this = capacity risk'},
@@ -226,8 +229,10 @@ function RE_CORE_FACTORY() {
       const audit = has(r.audit_decrement_qty) || text(r.audit_decrement_dates) !== '';
       if (audit) hasAudit = true;
       const vq = num(r.variance_qty), dec = num(r.audit_decrement_qty), inc = num(r.audit_increment_qty);
-      const pr = audit ? negativePriority(r.audit_decrement_dates, r.update_date || r.raw_synced_at)
+      let pr = audit ? negativePriority(r.audit_decrement_dates, r.update_date || r.raw_synced_at)
         : rank <= 25 ? {score: 1, priority: 'TOP25', bucket: 'Top 25 by ₹'} : rank <= 100 ? {score: 3, priority: 'TOP100', bucket: 'Top 100 by ₹'} : {score: 4, priority: 'RANKED', bucket: 'Ranked'};
+      // High-value SKUs (each missing unit worth ≥ high_value_unit_rs) are audited first, ahead of fresh negatives.
+      if (st.high_value_unit_rs > 0 && vq > 0 && variance / vq >= st.high_value_unit_rs) pr = {score: -1, priority: 'HV', bucket: 'High value (₹' + Math.round(variance / vq) + ' a unit)'};
       const it = {
         item_id: text(r.item_id), item_name: text(r.item_name), l0: text(r.l0), upc: text(r.upc), mrp: num(r.mrp), rnk: rank,
         variance, variance_qty: vq, unit_value: vq > 0 ? variance / vq : 0, audit_increment_qty: inc, recovery_status: audit ? recoveryStatus(dec, inc, vq) : 'UNKNOWN',
@@ -238,7 +243,7 @@ function RE_CORE_FACTORY() {
       items.push(it);
     });
     items.sort((a, b) => a.priority_score - b.priority_score || b.variance - a.variance || a.rnk - b.rnk);
-    const counts = {P0: 0, P1: 0, P2: 0, P3: 0, P4: 0};
+    const counts = {HV: 0, P0: 0, P1: 0, P2: 0, P3: 0, P4: 0};
     items.forEach(x => { counts[x.priority] = (counts[x.priority] || 0) + 1; });
     return {items, summary: {
       outlet_id: text(outletId), feed_date: feedDate, month_start: month, has_audit_columns: hasAudit,
@@ -405,7 +410,7 @@ function RE_CORE_FACTORY() {
       delete t.locations;
       t.items.sort((a, b) => b.variance - a.variance);
       t.item_count = t.items.length;
-      t.best_priority = t.best_score >= 5 ? 'EV' : 'P' + t.best_score;
+      t.best_priority = t.best_score >= 5 ? 'EV' : t.best_score < 0 ? 'HV' : 'P' + t.best_score;
       t.location_count = t.complex ? Math.max(master[t.rack] ? master[t.rack].size : st.locations_per_rack, nLoc) : t.level === 'SEARCH' ? 0 : nLoc;
       if (t.best_score === 9) t.best_score = 5;   // evidence-only racks rank after every variance-led task
       t.est_hours = round(t.level === 'SEARCH' ? gross(st.upc_search_minutes, st) : gross(t.location_count * st.minutes_per_location, st), 2);
@@ -495,7 +500,8 @@ function RE_CORE_FACTORY() {
         speed = medAud > 0 ? Math.min(1.3, Math.max(0.7, Math.sqrt(num(r.auditor_active_hours_l7) / medAud) || 0.7)) : 1;
         basis = medAud > 0 ? 'proxy: auditor hours L7' : 'no audit data';
       }
-      const approved = text(r.complex_approved).toUpperCase();
+      const approved = text(r.complex_approved).toUpperCase() ||
+        (text(st.complex_approved_ids) ? (inList(st.complex_approved_ids, text(r.captain_id) || text(r.employee_id)) ? 'Y' : 'N') : '');
       const presence = text(r.recent_presence_status).toUpperCase(), id = text(r.captain_id) || text(r.employee_id), p = P[id];
       const t1 = presence ? presence.indexOf('NOT T-1') < 0 && presence.indexOf('INACTIVE') < 0 : true;
       const floor = p ? (p.now ? 'NOW' : 'TODAY') : t1 ? 'T1' : 'AWAY';
@@ -568,11 +574,12 @@ function RE_CORE_FACTORY() {
       if (end > p.last_ms) p.last_ms = end;
       p.sessions += has(a.sessions) ? num(a.sessions) : 1;
       if (!p.name) p.name = text(a.auditor_name) || [text(a.auditor_first_name), text(a.auditor_last_name)].filter(Boolean).join(' ');
+      if (text(a.on_shift) === '1' || text(a.on_shift).toUpperCase() === 'TRUE') p.shift = true;
     });
     Object.keys(out).forEach(id => {
       const p = out[id];
       p.last_seen = fmt(p.last_ms).slice(11, 16);
-      p.now = nowMs !== null && nowMs - p.last_ms <= st.present_now_minutes * 60000;
+      p.now = !!p.shift || (nowMs !== null && nowMs - p.last_ms <= st.present_now_minutes * 60000);   // on an open shift = at the store now
     });
     return out;
   }
