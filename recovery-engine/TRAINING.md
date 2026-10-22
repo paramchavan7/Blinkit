@@ -5,7 +5,7 @@
 
 **Every day, 10:00 to 11:00:**
 1. **Open the link** (bookmark it). You see only your store. "Data 10:05" at the top shows how fresh it is.
-2. **Read the top card:** store state (Broken / At risk / Sorted), the recommended recovery (location check, rack sweep or aisle reset) and why.
+2. **Read the top card:** store state (BROKEN / DETERIORATING / CLEAN), the recommended recovery (location check, rack sweep or aisle reset) and why.
 3. **Racks with most variance:** tap **Do first** on the racks you want covered today. They go to your best captain before anything else.
 4. **Crew:** your most accurate auditors **on the floor today** are already ticked ("On floor · 10:42", "In today · 07:15"). Untick, change hours or add a name freely. **Nobody will ask you why.**
 5. **Confirm plan → Make printable sheet → print.** Give each captain their own page.

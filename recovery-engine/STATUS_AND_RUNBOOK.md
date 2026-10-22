@@ -9,8 +9,8 @@
 | "Who is at the store now" | Audits in the last 90 minutes only | **Improved.** `FLOOR_NOW_north.sql`: open shifts (ops_management.shift) + anyone working today, hourly. On shift = on the floor |
 | Store health | Off, so 0 BROKEN | **Partly closed.** Store PPI (picking) is live; TFR / R2A / surge still have no source |
 | Eligible auditor pool (`complex_approved`) | No flag in user_details | **Closed by setting.** CFG `complex_approved_ids`: paste Parth's employee IDs |
-| High-value SKU audits on top | Not in ranking | **Built.** Missing units worth ≥ ₹10,000 each rank first (HV). CFG `high_value_unit_rs` (0 = off) |
-| Charter state names (BROKEN / DETERIORATING / CHRONIC / CLEAN) | App uses SEVERELY_BROKEN / BROKEN / AT_RISK / SORTED | **Open: your decision** (asked) |
+| High-value SKU audits on top | Not in ranking | **Built.** Missing units worth ≥ ₹5,000 each rank first (HV), as you chose. CFG `high_value_unit_rs` (0 = off) |
+| Charter state names (BROKEN / DETERIORATING / CHRONIC / CLEAN) | App uses SEVERELY_BROKEN / BROKEN / AT_RISK / SORTED | **Done (labels):** screens show BROKEN / DETERIORATING / CLEAN; CHRONIC waits for a trend rule. Sheets keep the internal names |
 | Severity ₹ lines (₹1.5L pending, ₹4L open) | Placeholders | **Open: you + Parth**, 2 CFG cells |
 | Parth's V2 draft / review flow | Replaced, not ported | Show the swap in the demo |
 | Side-by-side vs Parth's plan preview | Not done | Before the demo: 1 store |
@@ -103,7 +103,7 @@ Grouped by what it serves: Parth's expectations, your vision, your charter.
 
 | Time | Step | Who | Done when |
 |---|---|---|---|
-| **0:00–0:05** | Answer the 4 questions (regions, access, state names, high-value) | **You** | Answers sent |
+| **0:00–0:05** | ~~Answer the 4 questions~~ (done) | You | ✔ |
 | 0:00–0:15 | Apps Script: replace **Code, Engine, Service, App** from the copy page → save → menu **1. Set up / repair tabs** (approve "connect to external service") | Chrome; you approve | END lines OK; SYNC tab has 10 rows |
 | 0:15–0:50 | Redash: create the **10 queries** on [Warehouse] Trino. They pick the North stores themselves. Run, check rows, save as `RE · …`, note the ids | Chrome | 10 query ids; checks noted |
 | 0:50–1:00 | CFG `inputs_sheet_id` = `1csiQryJ…` → Set up again → menu **Connect Redash** (you paste your Redash API key) → put the 10 ids in SYNC → **Sync data from Redash now** | Chrome; **you paste the key** | Every SYNC row OK |
@@ -123,11 +123,7 @@ Until then, "on the floor now" is right only for about 90 minutes after each imp
 
 ## Part 3. What I still need from you
 **Blocking (next 2 hours):**
-1. **Answers to the 4 questions in chat:**
-   - live regions;
-   - who gets automatic access;
-   - state names;
-   - the high-value rule.
+1. ~~The 4 questions~~ answered 22 Oct: all 6 regions; SM / ASM / senior SM + CM / ops head / CEO automatic; charter state names; HV at ₹5,000 a unit.
 2. **Approvals during the run:**
    - the Google permission screen ("connect to an external service");
    - **typing your Redash API key** into "Connect Redash";

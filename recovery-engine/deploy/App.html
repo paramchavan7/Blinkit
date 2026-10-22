@@ -85,6 +85,9 @@ const TONE = {HV: 'c-red', NOW: 'c-grn', TODAY: 'c-blu', T1: 'c-gry', AWAY: 'c-a
   A: 'c-grn', B: 'c-blu', C: 'c-gry', NEW: 'c-gry', PROXY: 'c-gry', FOUND: 'c-grn', CLEARED: 'c-grn', OPEN: 'c-amb', NOT_IN_FEED: 'c-gry', BETTER: 'c-grn', SUSTAINED: 'c-grn',
   WORSE: 'c-red', RELAPSED: 'c-red', FLAT: 'c-gry', PENDING: 'c-gry', NO_DATA: 'c-gry', NO_BASELINE: 'c-gry', NO_PLAN: 'c-amb', NO_ACTUALS: 'c-red', LOW_ADHERENCE: 'c-red',
   LOW_EXECUTION: 'c-red', NO_YIELD: 'c-amb', IN_PROGRESS: 'c-blu', ON_TRACK: 'c-grn', PILFERAGE: 'c-red', MISPLACED: 'c-amb', AUDIT_GAP: 'c-blu', OTHER: 'c-gry'};
+// Store states in the charter's words (labels only; the rules underneath are unchanged). CHRONIC waits for a trend rule.
+const STATE = {SEVERELY_BROKEN: 'BROKEN', BROKEN: 'BROKEN', AT_RISK: 'DETERIORATING', SORTED: 'CLEAN'};
+const stateChip = t => chip(t, STATE[t] || t);
 const chip = (s, l) => '<span class="chip ' + (TONE[s] || 'c-gry') + '">' + esc(l || String(s).replace(/_/g, ' ')) + '</span>';
 const lv = t => '<span class="chip lv lv-' + t.level + '">' + esc(t.label) + '</span>';
 const SRC = {PILFERAGE: 'Pilferage-prone', MISPLACED: 'Audit found it short (NEG location)', AUDIT_GAP: 'Never audited', OTHER: 'Other'};
@@ -208,8 +211,8 @@ function diagnoseCard() {
     RACK: 'Rack sweep: variance clusters in a few racks. Sweep those racks fully instead of chasing items.',
     LOCATION: 'Targeted item recovery: variance is scattered. Check the exact NEG / probable locations.'}[g.mode];
   let h = '<div class="card"><h1>' + esc(s.outlet_name) + '</h1><div class="sub">' + esc([s.outlet_id, s.region, s.cm_sm, 'feed ' + d.summary.feed_date].filter(Boolean).join(' · ')) + '</div><div class="row" style="margin-top:6px">' +
-    (s.cohort ? chip(s.cohort, 'Pilot: ' + s.cohort) + ' ' : '') + chip(sev.tier) + (sev.capacity ? ' ' + chip(sev.capacity === 'HEALTHY' ? 'HEALTHY' : sev.capacity === 'CONSTRAINED' ? 'CONSTRAINED' : 'AT_RISK', 'capacity ' + sev.capacity.replace('_', ' ').toLowerCase()) : '') + '</div>' +
-    (sev.reasons.length ? '<div class="sub" style="margin-top:4px">Why ' + esc(sev.tier.replace('_', ' ').toLowerCase()) + ': ' + esc(sev.reasons.join(' · ')) + '</div>' : '') +
+    (s.cohort ? chip(s.cohort, 'Pilot: ' + s.cohort) + ' ' : '') + stateChip(sev.tier) + (sev.capacity ? ' ' + chip(sev.capacity === 'HEALTHY' ? 'HEALTHY' : sev.capacity === 'CONSTRAINED' ? 'CONSTRAINED' : 'AT_RISK', 'capacity ' + sev.capacity.replace('_', ' ').toLowerCase()) : '') + '</div>' +
+    (sev.reasons.length ? '<div class="sub" style="margin-top:4px">Why ' + esc((STATE[sev.tier] || sev.tier).toLowerCase()) + ': ' + esc(sev.reasons.join(' · ')) + '</div>' : '') +
     (sev.metrics ? '<div class="sub">Store health ' + esc(sev.metrics.date) + ': PPI ' + n1(sev.metrics.ppi) + 's · TFR ' + n1(sev.metrics.tfr_pct) + '% · R2A ' + n1(sev.metrics.r2a_sec) + 's · surge ' + n1(sev.metrics.surge_pct) + '%</div>' : '') +
     '<div class="kpis"><div class="kpi"><b>' + rs(d.summary.total_absolute_pending) + '</b><small>absolute pending</small></div>' +
     (d.summary.has_audit_columns ? '<div class="kpi"><b>' + d.summary.priority_counts.P0 + '</b><small>fresh negatives (T-1)</small></div>'
@@ -366,7 +369,7 @@ function cluster() {
   let h = '<div class="card"><h1>Cluster review</h1><p class="sub">Are man-hours going into recovery that works? ' + rows.filter(r => r.flag.sev === 1).length + ' stores need you · ' +
     rows.filter(r => r.plan && r.plan.plan_date === S.boot.today).length + ' of ' + rows.length + ' planned today · last 7 days · data ' + esc(String(S.cm.refreshed_at).slice(11, 16)) + '</p>' +
     '<div class="scroll"><table><tr><th>Store</th><th>State</th><th class="right">Pending</th><th class="right hide-m">Hours S / P / A</th><th class="right">₹ / hour</th><th>Flag</th></tr>' +
-    rows.map(r => '<tr class="click" data-cm="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.outlet_id + ' · ' + (r.cluster || r.region)) + (r.on_floor_now ? ' · ' + r.on_floor_now + ' on floor' : '') + '</div></td><td>' + chip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + (r.top_rack ? ' · ' + esc(r.top_rack) : '') + '</div></td>' +
+    rows.map(r => '<tr class="click" data-cm="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.outlet_id + ' · ' + (r.cluster || r.region)) + (r.on_floor_now ? ' · ' + r.on_floor_now + ' on floor' : '') + '</div></td><td>' + stateChip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + (r.top_rack ? ' · ' + esc(r.top_rack) : '') + '</div></td>' +
       '<td class="right">' + rs(r.pending) + '</td><td class="right hide-m">' + n1(r.window.suggested_hours) + ' / ' + n1(r.window.planned_hours) + ' / ' + n1(r.window.actual_hours) + '</td><td class="right">' + rs(r.window.rupees_per_hour) + '</td><td>' + chip(r.flag.code) + '</td></tr>').join('') + '</table></div></div>';
   const r = rows.find(x => x.outlet_id === S.cmOpen);
   if (r) {
@@ -383,7 +386,7 @@ function cluster() {
 // ---------------------------------------------------------------- PM
 function tower() {
   const t = S.tower;
-  const regionRows = t.regions.map(g => '<tr><td><b>' + esc(g.region) + '</b></td><td class="right">' + g.stores + '</td><td>' + chip('BROKEN', g.broken + ' broken') + ' ' + chip('AT_RISK', g.at_risk + ' at risk') + ' ' + chip('SORTED', g.sorted + ' sorted') + '</td>' +
+  const regionRows = t.regions.map(g => '<tr><td><b>' + esc(g.region) + '</b></td><td class="right">' + g.stores + '</td><td>' + chip('BROKEN', g.broken + ' broken') + ' ' + chip('AT_RISK', g.at_risk + ' deteriorating') + ' ' + chip('SORTED', g.sorted + ' clean') + '</td>' +
     '<td class="right">' + g.planned_stores + ' / ' + g.stores + '</td><td class="right hide-m">' + n1(g.suggested_hours) + ' / ' + n1(g.planned_hours) + ' / ' + n1(g.actual_hours) + '</td><td class="right">' + rs(g.recovered_value) + '</td>' +
     '<td class="right">' + rs(g.rupees_per_hour) + '</td><td class="right">' + (g.pending_change_pct === null ? '–' : (g.pending_change_pct > 0 ? '+' : '') + g.pending_change_pct + '%') + '</td><td class="right">' + (g.flags ? chip('NO_ACTUALS', g.flags) : '0') + '</td></tr>').join('');
   return '<div class="card"><h1>Control tower</h1><p class="sub">Last 7 days. Hours = suggested / planned / actual. Pending change = absolute pending now vs 7 days ago. Data ' + esc(String(t.refreshed_at).slice(11, 16)) + '.</p>' +
@@ -393,7 +396,7 @@ function tower() {
     t.cohorts.map(c => '<tr><td>' + chip(c.cohort) + '</td><td class="right">' + c.stores + '</td><td class="right">' + n1(c.actual_hours) + '</td><td class="right">' + rs(c.recovered_value) + '</td><td class="right">' + rs(c.pending) + '</td><td class="right">' + rs(c.pending_then) + '</td></tr>').join('') + '</table></div>' +
     '<p class="sub">Broken stores should fall faster than their control pair. If control falls as fast, the recovery is not what moved it.</p></div>' +
     '<div class="card"><h2>Stores</h2><div class="scroll"><table><tr><th>Store</th><th>State</th><th class="right">Pending</th><th class="right">₹ / h</th><th>Flag</th></tr>' +
-    t.rows.slice().sort((a, b) => a.region.localeCompare(b.region) || a.flag.sev - b.flag.sev).map(r => '<tr class="click" data-open="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.region + (r.cohort ? ' · ' + r.cohort : '')) + '</div></td><td>' + chip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + (r.capacity ? ' · capacity ' + esc(r.capacity.toLowerCase().replace('_', ' ')) : '') + '</div></td><td class="right">' + rs(r.pending) + '</td><td class="right">' + rs(r.window.rupees_per_hour) + '</td><td>' + chip(r.flag.code) + '</td></tr>').join('') + '</table></div></div>';
+    t.rows.slice().sort((a, b) => a.region.localeCompare(b.region) || a.flag.sev - b.flag.sev).map(r => '<tr class="click" data-open="' + esc(r.outlet_id) + '"><td><b>' + esc(r.outlet_name.replace(/^SS |^LT /, '')) + '</b><div class="sub">' + esc(r.region + (r.cohort ? ' · ' + r.cohort : '')) + '</div></td><td>' + stateChip(r.severity) + '<div class="sub">' + esc(REC.LEVEL[r.mode].label) + (r.capacity ? ' · capacity ' + esc(r.capacity.toLowerCase().replace('_', ' ')) : '') + '</div></td><td class="right">' + rs(r.pending) + '</td><td class="right">' + rs(r.window.rupees_per_hour) + '</td><td>' + chip(r.flag.code) + '</td></tr>').join('') + '</table></div></div>';
 }
 
 /** Goodness metrics by day (METRICS_DAILY, written by the hourly refresh). Definitions: METRICS.md. */

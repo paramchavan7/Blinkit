@@ -68,7 +68,7 @@ function RE_CORE_FACTORY() {
     {key:'pilferage_keywords', def:'marlboro,classic ,gold flake,dunhill,cigarette,condom,personal massager,whey,protein powder,creatine,earbuds,tws,smart watch,power bank,trimmer,perfume,eau de,attar,ghee,cashew,almond,pistachio,walnut', type:'list', label:'Item-name words treated as pilferage-prone (used when the feed has no L0)'},
     {key:'min_item_variance', def:20, type:'num', label:'Ignore items with variance ₹ below this (rounding noise)'},
     {key:'high_value_mrp', def:500, type:'num', label:'MRP at or above which an item is pilferage-prone'},
-    {key:'high_value_unit_rs', def:10000, type:'num', label:'Items whose missing units are worth at least this ₹ each go to the top of the worklist (HV). 0 = off'},
+    {key:'high_value_unit_rs', def:5000, type:'num', label:'Items whose missing units are worth at least this ₹ each go to the top of the worklist (HV). 0 = off'},
     {key:'complex_approved_ids', def:'', type:'list', label:'Employee IDs approved for rack / aisle sweeps (Parth\'s eligible auditor list). Blank = cleared by bad-audit %'},
     {key:'sev_ppi_target', def:18, type:'num', label:'Severity (Parth LiveHealth): store PPI above this = broken'},
     {key:'sev_tfr_target', def:99.5, type:'num', label:'Severity (Parth LiveHealth): TFR % below this = broken. PPI and TFR both broken = SEVERELY BROKEN'},
