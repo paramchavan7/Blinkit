@@ -123,6 +123,7 @@ const syncNames = g.tab(ss, 'SYNC').map(r => r.tab);
 same(syncNames, ['RAWItemlevel', 'STORE_VARIANCE_DAILY', 'EMPLOYEE_CAPACITY_SYNC_RAW', 'LOCATION_RECOVERY_RAW', 'AUDIT_EXECUTION_RAW', 'FLOOR_NOW', 'AUDITOR_DAILY', 'STORE_HEALTH_RAW', 'STORE_MASTER', 'USERS_AUTO']);
 const rowOf = t => syncNames.indexOf(t) + 2;
 syncTab.getRange(rowOf('AUDIT_EXECUTION_RAW'), 2).setValue('701');
+syncTab.getRange(rowOf('AUDIT_EXECUTION_RAW'), 4).setValue('0');    // run mode for this one; the others download stored results
 syncTab.getRange(rowOf('FLOOR_NOW'), 2).setValue('702');      // fails in Redash
 syncTab.getRange(rowOf('USERS_AUTO'), 2).setValue('703');     // auto users from the North master
 const gs = require('./gas_sim.js');

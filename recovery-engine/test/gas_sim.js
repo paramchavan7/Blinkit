@@ -170,6 +170,7 @@ function makeGas(opts) {
     MailApp: {sendEmail: m => mails.push(m)},
     // Redash API mock: opts.redash = {key, queries: {id: {columns, rows} | 'fail'}}. First call returns a job, like a real run.
     UrlFetchApp: {fetch: (url, o) => {
+      o = o || {};
       hit('urlFetch', 0);
       const R = opts.redash || {queries: {}}, reply = (code, obj) => ({getResponseCode: () => code, getContentText: () => typeof obj === 'string' ? obj : JSON.stringify(obj)});
       if (!o.headers || o.headers.Authorization !== 'Key ' + R.key) return reply(403, {message: 'Invalid API key'});
@@ -177,6 +178,8 @@ function makeGas(opts) {
       if (m) { const q = R.queries[m[1]]; if (!q) return reply(404, {message: 'Query not found'}); return reply(200, {job: {id: 'job-' + m[1], status: 1}}); }
       m = /\/api\/jobs\/job-(\w+)$/.exec(url);
       if (m) { const q = R.queries[m[1]]; return reply(200, {job: q === 'fail' ? {id: 'job-' + m[1], status: 4, error: 'Query failed: table not found'} : {id: 'job-' + m[1], status: 3, query_result_id: 'r' + m[1]}}); }
+      m = /\/api\/queries\/(\w+)\/results\.csv$/.exec(url);
+      if (m) { const q = R.queries[m[1]]; if (!q || q === 'fail') return reply(404, {message: 'No cached result'}); url = '/api/query_results/r' + m[1] + '.csv'; }
       m = /\/api\/query_results\/r(\w+)\.csv$/.exec(url);
       if (m) { const d = R.queries[m[1]], cols = d.columns.map(c => c.name), q = v => { const x = v === null || v === undefined ? '' : String(v); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
         return reply(200, [cols.join(',')].concat(d.rows.map(r => cols.map(c => q(r[c])).join(','))).join('\n')); }

@@ -70,10 +70,11 @@ var RE_OWN_H = {
   HEALTH: ['checked_at', 'input', 'source', 'rows', 'outlets', 'latest_date', 'status', 'note']
 };
 // Redash -> input tab sync. Fill redash_query_id in the SYNC tab; rows without an id are left alone (paste those tabs by hand).
+// max_age_minutes > 0 = download the stored result kept fresh by the query's Redash schedule (recommended at North scale).
 var RE_SYNC_DEFAULT = [
-  ['RAWItemlevel', '', 'daily', 0], ['STORE_VARIANCE_DAILY', '', 'daily', 0], ['EMPLOYEE_CAPACITY_SYNC_RAW', '', 'daily', 0],
-  ['LOCATION_RECOVERY_RAW', '', 'daily', 0], ['AUDIT_EXECUTION_RAW', '', 'hourly', 0], ['FLOOR_NOW', '', 'hourly', 0], ['AUDITOR_DAILY', '', 'daily', 0],
-  ['STORE_HEALTH_RAW', '', 'daily', 0], ['STORE_MASTER', '', 'daily', 0], ['USERS_AUTO', '', 'daily', 0]
+  ['RAWItemlevel', '', 'daily', 600], ['STORE_VARIANCE_DAILY', '', 'daily', 600], ['EMPLOYEE_CAPACITY_SYNC_RAW', '', 'daily', 600],
+  ['LOCATION_RECOVERY_RAW', '', 'daily', 600], ['AUDIT_EXECUTION_RAW', '', 'hourly', 90], ['FLOOR_NOW', '', 'hourly', 90], ['AUDITOR_DAILY', '', 'daily', 600],
+  ['STORE_HEALTH_RAW', '', 'daily', 600], ['STORE_MASTER', '', 'daily', 600], ['USERS_AUTO', '', 'daily', 600]
 ];
 // DRAFT handheld SOP. Rahul's ground documentation replaces these rows in the SOP tab; the app reads the tab, not this list.
 var RE_DEFAULT_SOP = [
@@ -644,28 +645,43 @@ function re_redash(path, payload) {
   if (code >= 400) throw new Error('Redash HTTP ' + code + ' on ' + path + ': ' + body.slice(0, 200));
   try { return JSON.parse(body); } catch (e) { throw new Error('Redash did not answer with JSON on ' + path + ' (login page? check the address and key): ' + body.slice(0, 120)); }
 }
+/** GET a Redash CSV (stored result of a query, or one result id); retries twice on server errors (Trino / Redash hiccups). */
+function re_redashCsv(path) {
+  var p = PropertiesService.getScriptProperties(), last = '';
+  for (var t = 0; t < 3; t++) {
+    var res = UrlFetchApp.fetch(p.getProperty('REDASH_URL') + path, {headers: {Authorization: 'Key ' + p.getProperty('REDASH_API_KEY')}, muteHttpExceptions: true});
+    var code = res.getResponseCode();
+    if (code < 400) return Utilities.parseCsv(res.getContentText());
+    last = 'Redash HTTP ' + code + ' on ' + path + ': ' + res.getContentText().slice(0, 160);
+    if (code < 500) break;
+    Utilities.sleep(5000);
+  }
+  throw new Error(last);
+}
 /**
- * Runs a query in Redash (or takes its stored result when max_age_minutes > 0 and it is fresh enough) and returns it as rows:
- * [header, ...]. Large results are downloaded as CSV, which is several times smaller than JSON. Waits up to 4 minutes for a run.
+ * Rows of a query, [header, ...]. Two modes, set per SYNC row:
+ *   max_age_minutes > 0: download the query's stored result (its Redash schedule keeps it fresh). Fast; nothing runs in Trino.
+ *   max_age_minutes = 0: run the query now, wait up to 4 minutes, retry a failed run once (Trino "connection pool shut down" etc.).
  */
 function re_redashRows(id, maxAge) {
-  var out = re_redash('/api/queries/' + id + '/results', {max_age: maxAge, parameters: {}}), deadline = Date.now() + 240000, rid = null;
-  while (out.job && !out.query_result) {
-    var job = out.job;
-    if (job.status === 3) { rid = job.query_result_id; break; }
-    if (job.status === 4 || job.status === 5) throw new Error('query ' + id + ' failed in Redash: ' + (job.error || 'cancelled'));
-    if (Date.now() > deadline) throw new Error('query ' + id + ' still running after 4 minutes (add a Redash schedule and set max_age_minutes to 90)');
-    Utilities.sleep(3000);
-    out = re_redash('/api/jobs/' + job.id);
+  if (maxAge > 0) return {at: 'stored result', rows: re_redashCsv('/api/queries/' + id + '/results.csv')};
+  var lastErr = '';
+  for (var attempt = 0; attempt < 2; attempt++) {
+    var out = re_redash('/api/queries/' + id + '/results', {max_age: 0, parameters: {}}), deadline = Date.now() + 240000, rid = null, failed = '';
+    while (out.job && !out.query_result) {
+      var job = out.job;
+      if (job.status === 3) { rid = job.query_result_id; break; }
+      if (job.status === 4 || job.status === 5) { failed = 'query ' + id + ' failed in Redash: ' + (job.error || 'cancelled'); break; }
+      if (Date.now() > deadline) throw new Error('query ' + id + ' still running after 4 minutes: give it a Redash schedule and set max_age_minutes above 0');
+      Utilities.sleep(3000);
+      out = re_redash('/api/jobs/' + job.id);
+    }
+    if (out.query_result) return {at: out.query_result.retrieved_at, rows: re_redashCsv('/api/query_results/' + out.query_result.id + '.csv')};
+    if (rid) return {at: 'run ' + Utilities.formatDate(new Date(), RE_TZ, 'HH:mm'), rows: re_redashCsv('/api/query_results/' + rid + '.csv')};
+    lastErr = failed;
+    Utilities.sleep(10000);
   }
-  if (out.query_result) {
-    var qr = out.query_result, cols = qr.data.columns.map(function (c) { return c.name; });
-    return {at: qr.retrieved_at, rows: [cols].concat(qr.data.rows.map(function (row) { return cols.map(function (c) { var v = row[c]; return v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : v; }); }))};
-  }
-  var p = PropertiesService.getScriptProperties(), res = UrlFetchApp.fetch(p.getProperty('REDASH_URL') + '/api/query_results/' + rid + '.csv',
-    {headers: {Authorization: 'Key ' + p.getProperty('REDASH_API_KEY')}, muteHttpExceptions: true});
-  if (res.getResponseCode() >= 400) throw new Error('Redash HTTP ' + res.getResponseCode() + ' downloading result ' + rid);
-  return {at: 'run ' + Utilities.formatDate(new Date(), RE_TZ, 'HH:mm'), rows: Utilities.parseCsv(res.getContentText())};
+  throw new Error(lastErr);
 }
 /** Replaces a tab's content with rows, in blocks of 20,000 rows so large results stay inside Apps Script limits. */
 function re_writeTab(book, name, vals) {
