@@ -1,5 +1,5 @@
 // RECOVERY ENGINE · Engine.gs (the recovery logic). In Apps Script this file must be called Engine.
-// Paste the whole file, replacing everything in it. Built 2026-10-21 from IRD_Core.gs. Do not edit here; settings live in the CFG tab.
+// Paste the whole file, replacing everything in it. Built 2026-10-22 from IRD_Core.gs. Do not edit here; settings live in the CFG tab.
 
 /**
  * Recovery Engine v2 | Core logic
@@ -302,8 +302,9 @@ function RE_CORE_FACTORY() {
     const inventory = score >= 3 ? 'BROKEN' : score >= 1 ? 'AT_RISK' : 'SORTED';
     let ops = null, capacity = null;
     const m = metrics || null;
-    if (m && m.ppi !== null && m.tfr_pct !== null) {
-      const pb = m.ppi > st.sev_ppi_target, tb = m.tfr_pct < st.sev_tfr_target;
+    if (m && m.ppi !== null) {
+      // TFR may be missing (our store-health query has PPI only): PPI alone can then make a store BROKEN, never SEVERELY_BROKEN.
+      const hasT = m.tfr_pct !== null && m.tfr_pct !== undefined, pb = m.ppi > st.sev_ppi_target, tb = hasT && m.tfr_pct < st.sev_tfr_target;
       ops = pb && tb ? 'SEVERELY_BROKEN' : pb || tb ? 'BROKEN' : 'SORTED';
       if (pb) reasons.push('PPI ' + m.ppi + 's > ' + st.sev_ppi_target + 's');
       if (tb) reasons.push('TFR ' + m.tfr_pct + '% < ' + st.sev_tfr_target + '%');

@@ -119,7 +119,7 @@ console.log('  alerts sent:', g.mails.map(m => m.subject).join(' | '));
 const toRedash = rows => ({columns: Object.keys(rows[0]).map(n => ({name: n})), rows});
 g.props.REDASH_URL = 'https://redash.test'; g.props.REDASH_API_KEY = 'k1';
 const syncTab = ss.getSheetByName('SYNC');
-same(g.tab(ss, 'SYNC').map(r => r.tab), ['RAWItemlevel', 'STORE_VARIANCE_DAILY', 'EMPLOYEE_CAPACITY_SYNC_RAW', 'LOCATION_RECOVERY_RAW', 'AUDIT_EXECUTION_RAW', 'AUDITOR_DAILY']);
+same(g.tab(ss, 'SYNC').map(r => r.tab), ['RAWItemlevel', 'STORE_VARIANCE_DAILY', 'EMPLOYEE_CAPACITY_SYNC_RAW', 'LOCATION_RECOVERY_RAW', 'AUDIT_EXECUTION_RAW', 'AUDITOR_DAILY', 'STORE_HEALTH_RAW']);
 syncTab.getRange(6, 2).setValue('701');   // AUDIT_EXECUTION_RAW
 syncTab.getRange(7, 2).setValue('702');   // AUDITOR_DAILY (fails)
 const gs = require('./gas_sim.js');
@@ -136,7 +136,7 @@ g.advance(60 * 60000);
 g.call('RE_REFRESH');
 assert.ok(g.mails.some(m => /Redash sync failed: AUDITOR_DAILY/.test(m.subject)), 'sync failure alerted');
 const mon2 = g.call('RE_MONITOR');
-assert.ok(mon2.sync.length === 6 && mon2.sync[5].status === 'ERROR');
+assert.ok(mon2.sync.length === 7 && mon2.sync[5].status === 'ERROR');
 g.props.REDASH_API_KEY = 'wrong';
 g.call('RE_SYNC_HOURLY');
 assert.ok(/HTTP 403/.test(g.tab(ss, 'SYNC')[4].note), 'bad key reported per row');

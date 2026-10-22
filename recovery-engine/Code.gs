@@ -40,7 +40,7 @@ var RE_INPUTS = {
     fill: 'Pilot list: BROKEN / CONTROL pairs (the ready table on the copy page).', unlocks: 'Broken vs control comparison in the control tower.'},
   METRICS: {tab: 'STORE_HEALTH_RAW', cfgTab: 'tab_store_metrics', need: ['outlet_id'], date: 'metric_date',
     cols: ['metric_date', 'data_period_status', 'region', 'outlet_id', 'outlet_name', 'ppi', 'tfr_pct', 'r2a_sec', 'surge_pct'],
-    fill: 'Parth\'s STORE_HEALTH_RAW query with the North outlet list. Refresh daily.', unlocks: 'PPI / TFR severity and capacity state.'},
+    fill: 'STORE_HEALTH_north.sql: daily store PPI from picking activity (TFR / R2A / surge not available yet). Refresh daily.', unlocks: 'PPI part of Parth\'s LiveHealth severity.'},
   CAPTAINS: {tab: 'EMPLOYEE_CAPACITY_SYNC_RAW', cfgTab: 'tab_captains', need: ['outlet_id'], date: 'snapshot_date',
     cols: ['snapshot_date', 'outlet_id', 'employee_id', 'employee_name', 'designation', 'auditor_active_hours_l7', 'missing_complaint_pct_l7',
       'wrong_item_complaint_pct_l7', 'recent_presence_status', 'complex_approved', 'captain_id', 'captain_name', 'active', 'iaph', 'qaph', 'bad_audit_pct', 'audits_30d'],
@@ -68,7 +68,8 @@ var RE_OWN_H = {
 // Redash -> input tab sync. Fill redash_query_id in the SYNC tab; rows without an id are left alone (paste those tabs by hand).
 var RE_SYNC_DEFAULT = [
   ['RAWItemlevel', '', 'daily', 600], ['STORE_VARIANCE_DAILY', '', 'daily', 600], ['EMPLOYEE_CAPACITY_SYNC_RAW', '', 'daily', 600],
-  ['LOCATION_RECOVERY_RAW', '', 'daily', 600], ['AUDIT_EXECUTION_RAW', '', 'hourly', 30], ['AUDITOR_DAILY', '', 'hourly', 30]
+  ['LOCATION_RECOVERY_RAW', '', 'daily', 600], ['AUDIT_EXECUTION_RAW', '', 'hourly', 30], ['AUDITOR_DAILY', '', 'hourly', 30],
+  ['STORE_HEALTH_RAW', '', 'daily', 600]
 ];
 // DRAFT handheld SOP. Rahul's ground documentation replaces these rows in the SOP tab; the app reads the tab, not this list.
 var RE_DEFAULT_SOP = [
@@ -444,8 +445,9 @@ function RE_SETUP() {
   re_startHere(ss);
   var sop = ss.getSheetByName('SOP');
   if (sop.getLastRow() < 2) sop.getRange(2, 1, RE_DEFAULT_SOP.length, 3).setValues(RE_DEFAULT_SOP);
-  var sync = ss.getSheetByName('SYNC');
-  if (sync.getLastRow() < 2) sync.getRange(2, 1, RE_SYNC_DEFAULT.length, 4).setValues(RE_SYNC_DEFAULT);
+  var sync = ss.getSheetByName('SYNC'), listed = re_rowsOf(sync).map(function (r) { return re_text(r.tab); });
+  var addSync = RE_SYNC_DEFAULT.filter(function (d) { return listed.indexOf(d[0]) < 0; });   // new default rows are added, your ids are kept
+  if (addSync.length) sync.getRange(sync.getLastRow() + 1, 1, addSync.length, 4).setValues(addSync);
   var users = ss.getSheetByName('USERS'), me = Session.getActiveUser().getEmail();
   if (users.getLastRow() < 2 && me) users.appendRow([me.toLowerCase(), 'PM', '', '', '', 'added by setup']);
   return re_alert_('Recovery Engine is set up. Open the START_HERE tab: it lists which query goes into which blue tab.');

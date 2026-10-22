@@ -13,7 +13,7 @@ You are in Param Chavan's Chrome (param.chavan@grofers.com). This picks up from 
 ## Done when (all must be true; report each with its evidence)
 1. Crew chips on at least one AT_RISK store show **real names with "On floor · HH:MM"**, and the suggested crew is ticked.
 2. **Monitoring** shows:
-   - Redash sync OK for the 6 tabs;
+   - Redash sync OK for the 7 tabs;
    - the last refresh OK in the last hour;
    - the triggers RE_REFRESH, RE_SYNC_HOURLY, RE_SYNC_DAILY and RE_MAINTAIN.
 3. **"Racks with most variance"** is visible. **Do first → Confirm → Make printable sheet** works, and the PDF has one page per captain.
@@ -24,7 +24,7 @@ You are in Param Chavan's Chrome (param.chavan@grofers.com). This picks up from 
 - Paste code and SQL only from the copy page. Never edit code. If something fails, copy the exact error text and the file and line, then stop that step.
 - **Param approves** every Google permission screen, the deploy, and sharing with anyone.
 - **Redash API key:** copy it only into the app's "Connect Redash" prompt. Never put it in a report, a chat, a tab or a query.
-- Redash: save the 6 queries below with their names. Never edit or fork anyone else's query.
+- Redash: save the 7 queries below with their names. Never edit or fork anyone else's query.
 - Check every ✔ before moving on.
 
 ---
@@ -35,15 +35,16 @@ The code changed after your install:
 - Service.gs: roster filter;
 - Code.gs: built-in Redash sync, sync alerts, Monitoring shows the sync.
 
-Engine.gs did not change.
+Engine.gs also changed: severity now works with PPI alone. Replace all 4 files.
 
-1. In Apps Script, replace the content of **Code**, **Service** and **App** with the matching copy-page cards. Save each.
-   - ✔ The three END lines are present.
+1. In Apps Script, replace the content of **Code**, **Engine**, **Service** and **App** with the matching copy-page cards. Save each.
+   - ✔ The four END lines are present.
    - ✔ Saving shows no SyntaxError.
 2. In the sheet: **Recovery Engine → 1. Set up / repair tabs** (Param approves the new permission: "connect to an external service", which is for Redash).
-   - ✔ A new **SYNC** tab exists, listing 6 tabs with an empty `redash_query_id`.
+   - ✔ A new **SYNC** tab exists, listing 7 tabs with an empty `redash_query_id`.
 
-## Step 2: Create the 6 queries in Redash (30–40 min)
+## Step 2: Create the 7 queries in Redash (30–40 min)
+**North stores:** in every query, replace the IDs in the `scope` block with the North list Param gives you (the same list in all 7).
 For each card below:
 1. **New Query** → data source **[Warehouse] Trino** → paste → **Execute**.
 2. Check the result against the table. If the check fails, still save, and note it in the report.
@@ -58,6 +59,7 @@ For each card below:
 | `LOCATION_RACKS_north.sql` | RE · LOCATION_RACKS | 150–400 rows per store | LOCATION_RECOVERY_RAW |
 | `RAWItemlevel_north.sql` | RE · RAWItemlevel | At most 200 rows per store. Some rows have `audit_decrement_qty` > 0 | RAWItemlevel |
 | `STORE_VARIANCE_DAILY.sql` | RE · STORE_VARIANCE_DAILY | About 51 stores × 60–90 days | STORE_VARIANCE_DAILY |
+| `STORE_HEALTH_north.sql` | RE · STORE_HEALTH | One row per store per day; `ppi` mostly 10–40 s | STORE_HEALTH_RAW |
 
 - **A query that runs longer than 4 minutes** won't sync (the sync waits 4 minutes). Note it. For AUDIT_SESSIONS or AUDITOR_DAILY, also add a Redash schedule (every hour) so the sync reads a stored result.
 - **Optional, faster syncs:** add Redash schedules. Hourly for AUDIT_SESSIONS and AUDITOR_DAILY; daily 07:30 for the other four.
@@ -81,7 +83,7 @@ For each card below:
 1. Menu **2. Check data health**.
    - ✔ The required rows are OK.
    - ✔ AUDIT_EXECUTION_RAW, AUDITOR_DAILY, EMPLOYEE_CAPACITY_SYNC_RAW and LOCATION_RECOVERY_RAW are OK.
-   - STORE_HEALTH_RAW shows **OFF**. That is expected: there is no PPI/TFR source yet.
+   - STORE_HEALTH_RAW is OK with PPI only (TFR, R2A and surge stay blank: no source yet).
 2. Menu **Refresh all stores now**.
    - ✔ JOB_RUNS's last row is OK (expect under 60 s).
 3. Open the /dev URL. In **Today**, pick an AT_RISK store.
@@ -113,7 +115,7 @@ For each card below:
 ## Report back (paste this filled in)
 ```
 Code updated (Code/Service/App END lines ok):
-Redash query ids: AUDIT_SESSIONS= AUDITOR_DAILY= ROSTER= LOCATION_RACKS= RAWItemlevel= STORE_VARIANCE_DAILY=
+Redash query ids: AUDIT_SESSIONS= AUDITOR_DAILY= ROSTER= LOCATION_RACKS= RAWItemlevel= STORE_VARIANCE_DAILY= STORE_HEALTH=
 Query checks (rows, runtime, BELOW share, designation values):
 SYNC statuses (tab: status, rows):
 HEALTH (input: status):

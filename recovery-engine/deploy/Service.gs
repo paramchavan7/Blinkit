@@ -1,5 +1,5 @@
 // RECOVERY ENGINE · Service.gs (the screens and the refresh job). In Apps Script this file must be called Service.
-// Paste the whole file, replacing everything in it. Built 2026-10-21 from IRD_Service.gs. Do not edit here; settings live in the CFG tab.
+// Paste the whole file, replacing everything in it. Built 2026-10-22 from IRD_Service.gs. Do not edit here; settings live in the CFG tab.
 
 /**
  * Recovery Engine v3 | Service (orchestration)
